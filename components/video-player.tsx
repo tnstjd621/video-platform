@@ -76,7 +76,12 @@ export function VideoPlayer({
   const [muted, setMuted] = useState(false)
   const [showUI, setShowUI] = useState(true)
   const [isFs, setIsFs] = useState(false)
-  const [bufferFrac, setBufferFrac] = useState(0) // 버퍼된 비율(0~1)
+  const [bufferFrac, setBufferFrac] = useState(1) // 버퍼된 비율(0~1)
+  const [playbackRate, setPlaybackRate] = useState(1)
+  const playbackRates = [0.5, 1, 1.25, 1.5, 2]
+  const [lockUI, setLockUI] = useState(false)
+  const [rateOpen, setRateOpen] = useState(false)
+
 
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const progressTimer = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -156,7 +161,10 @@ export function VideoPlayer({
         events: {
           onReady: (e: any) => {
             setIsReady(true)
-            try { e.target.setVolume(volume) } catch {}
+            try { 
+              e.target.setVolume(volume)
+              e.target.setPlaybackRate(playbackRate)
+            } catch {}
             if (initialProgress > 0) {
               try { e.target.seekTo(initialProgress, true) } catch {}
             }
@@ -168,7 +176,7 @@ export function VideoPlayer({
             }
 
             // 2초마다 진행도 저장(학생)
-            if (userRole === "student") {
+            
               progressTimer.current = setInterval(async () => {
                 try {
                   const cur = Math.floor(e?.target?.getCurrentTime?.() || 0)
@@ -181,7 +189,7 @@ export function VideoPlayer({
                   )
                 } catch {}
               }, 1000)
-            }
+
 
             // 버퍼 업데이트(부드러운 진행 바)
             bufferTimer.current = setInterval(() => {
@@ -251,12 +259,14 @@ export function VideoPlayer({
 
   // 3초 무동작 시 컨트롤 숨김(일시정지 중에는 계속 표시)
   const pokeUI = useCallback(() => {
+    if (lockUI) return
+
     setShowUI(true)
     if (idleTimer.current) clearTimeout(idleTimer.current)
     idleTimer.current = setTimeout(() => {
-      if (isPlaying) setShowUI(false)
+       if(isPlaying) setShowUI(false)
     }, 3000)
-  }, [isPlaying])
+  }, [isPlaying, lockUI])
   useEffect(() => { pokeUI() }, [isReady, pokeUI, isPlaying])
 
   // 스페이스: 재생/일시정지 + 컨텍스트 키 차단 로직 보완 ★
@@ -339,6 +349,11 @@ export function VideoPlayer({
     pokeUI()
   }
 
+  const changePlaybackRate = (rate: number) => {
+    setPlaybackRate(rate)
+    try { playerRef.current?.setPlaybackRate(rate) } catch {}
+    pokeUI()
+  }
   const percent = duration > 0 ? Math.round((current / duration) * 100) : 0
 
   return (
@@ -443,55 +458,108 @@ export function VideoPlayer({
               )}
             </button>
 
-            <button
-              onClick={(e) => { e.stopPropagation(); toggleMute() }}
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 ring-1 ring-white/20 hover:bg-white/20"
-              aria-label="静音"
-            >
-              {muted || volume === 0 ? (
-                <svg viewBox="0 0 24 24" className="h-5 w-5 fill-white">
-                  <path d="M16.5 12l3.5 3.5-1.5 1.5L15 13.5 11.5 17l-1.5-1.5L13.5 12 10 8.5 11.5 7 15 10.5l3.5-3.5 1.5 1.5L16.5 12zM3 10v4h4l5 5V5L7 10H3z"/>
-                </svg>
-              ) : (
-                <svg viewBox="0 0 24 24" className="h-5 w-5 fill-white">
-                  <path d="M3 10v4h4l5 5V5L7 10H3zm13.5 2c0-1.77-1.02-3.29-2.5-4.03v8.06a4.49 4.49 0 002.5-4.03zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
-                </svg>
-              )}
-            </button>
+            {/* 🔊 볼륨 컨트롤 */}
+<div className="flex items-center gap-2 w-36">
+  {/* 볼륨 아이콘 */}
+  <button
+    onClick={(e) => {
+      e.stopPropagation()
+      onVolume(muted ? 50 : 0)
+    }}
+    className="flex h-10 w-10 items-center justify-center rounded-full
+               bg-white/10 ring-1 ring-white/20 hover:bg-white/20"
+    aria-label="音量"
+  >
+    {volume === 0 ? (
+      <svg viewBox="0 0 24 24" className="h-5 w-5 fill-white">
+        <path d="M16.5 12l3.5 3.5-1.5 1.5L15 13.5 11.5 17l-1.5-1.5L13.5 12 10 8.5 11.5 7 15 10.5l3.5-3.5 1.5 1.5L16.5 12zM3 10v4h4l5 5V5L7 10H3z"/>
+      </svg>
+    ) : (
+      <svg viewBox="0 0 24 24" className="h-5 w-5 fill-white">
+        <path d="M3 10v4h4l5 5V5L7 10H3zm13.5 2c0-1.77-1.02-3.29-2.5-4.03v8.06a4.49 4.49 0 002.5-4.03zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+      </svg>
+    )}
+  </button>
 
-            {/* 볼륨 슬라이더 */}
-            <div
-              className="group relative"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="pointer-events-none absolute bottom-full left-1/2 hidden -translate-x-1/2 translate-y-[-8px] rounded-lg bg-white/10 p-2 backdrop-blur ring-1 ring-white/20 group-hover:block">
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={volume}
-                  onChange={(e) => onVolume(Number(e.target.value))}
-                  className="h-1 w-28 cursor-pointer appearance-none rounded bg-white/25 accent-white"
-                />
-              </div>
-            </div>
+  {/* 볼륨 슬라이더 (항상 표시) */}
+  <input
+    type="range"
+    min={0}
+    max={100}
+    value={volume}
+    onChange={(e) => onVolume(Number(e.target.value))}
+    className="
+      h-1 flex-1 cursor-pointer appearance-none
+      rounded bg-white/25 accent-white
+    "
+  />
+</div>
           </div>
+          {/* 우측: 배속 + 전체화면 */}
+<div className="flex items-center gap-2">
 
-          {/* 우측: 전체화면 */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={(e) => { e.stopPropagation(); toggleFullscreen() }}
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 ring-1 ring-white/20 hover:bg-white/20"
-              aria-label={isFs ? "退出全屏" : "全屏"}
+  {/* ▶️ 배속 버튼 */}
+<div
+  className="relative pointer-events-auto"
+  onClick={(e) => {
+    e.stopPropagation()
+    setRateOpen((v) => !v)
+  }}
+>
+  <button
+    className="flex h-10 px-3 items-center justify-center rounded-full
+               bg-white/10 ring-1 ring-white/20 hover:bg-white/20
+               text-white text-sm tabular-nums"
+  >
+    {playbackRate}x
+  </button>
+
+  {/* 배속 리스트 */}
+  {rateOpen && (
+    <div
+      className="
+        absolute bottom-full right-0 mb-2
+        flex flex-col
+        rounded-lg bg-black/70 backdrop-blur
+        ring-1 ring-white/20
+        z-30
+      "
+      onClick={(e) => e.stopPropagation()}
+    >
+      {playbackRates.map((r) => (
+        <button
+          key={r}
+          onClick={() => {
+            changePlaybackRate(r)
+            setRateOpen(false)
+          }}
+          className={cn(
+            "px-4 py-2 text-sm text-white hover:bg-white/20 text-left",
+            r === playbackRate && "bg-white/20"
+          )}
+        >
+          {r}x
+        </button>
+      ))}
+    </div>
+  )}
+</div>
+
+
+  {/* 기존 전체화면 버튼 (원본 그대로) */}
+  <button
+    onClick={(e) => { e.stopPropagation(); toggleFullscreen() }}
+    className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 ring-1 ring-white/20 hover:bg-white/20"
+    aria-label={isFs ? "退出全屏" : "全屏"}
             >
               {isFs ? (
                 <svg viewBox="0 0 24 24" className="h-5 w-5 fill-white">
                   <path d="M14 10V4h6v2h-4v4h-2zM4 10V4h6v2H6v4H4zm10 10v-6h2v4h4v2h-6zM4 20v-6h2v4h4v2H4z" />
                 </svg>
               ) : (
-                <svg viewBox="0 0 24 24" className="h-5 w-5 fill-white">
+               <svg viewBox="0 0 24 24" className="h-5 w-5 fill-white">
                   <path d="M10 4v2H6v4H4V4h6zm10 6h-2V6h-4V4h6v6zM4 14h2v4h4v2H4v-6zm16 6h-6v-2h4v-4h2v6z" />
-                </svg>
+               </svg>
               )}
             </button>
           </div>
