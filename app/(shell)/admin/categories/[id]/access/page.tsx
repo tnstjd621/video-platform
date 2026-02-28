@@ -5,7 +5,13 @@ import { useParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 export default function CategoryAccessPage() {
   const params = useParams()
@@ -17,21 +23,41 @@ export default function CategoryAccessPage() {
   const [selectedStudent, setSelectedStudent] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
-  // 학생 목록 가져오기
+  // ✅ 현재 카테고리의 "최상위 카테고리 ID" 구하는 함수
+  const getRootCategoryId = async () => {
+    const { data: category } = await supabase
+      .from("categories")
+      .select("id, parent_id")
+      .eq("id", categoryId)
+      .single()
+
+    if (!category) return null
+
+    // 현재 구조가 2단계 (ML → OTML/NTML)이므로
+    // parent_id 있으면 부모가 최상위
+    return category.parent_id ? category.parent_id : category.id
+  }
+
+  // ✅ 학생 목록 가져오기
   const fetchStudents = async () => {
     const { data } = await supabase
       .from("profiles")
       .select("id, name")
       .eq("role", "student")
+
     setStudents(data || [])
   }
 
-  // 권한 목록 가져오기
+  // ✅ 권한 목록 가져오기 (항상 최상위 기준)
   const fetchAccessList = async () => {
+    const rootId = await getRootCategoryId()
+    if (!rootId) return
+
     const { data } = await supabase
       .from("category_access")
       .select("id, student_id, profiles(name)")
-      .eq("category_id", categoryId)
+      .eq("category_id", rootId)
+
     setAccessList(data || [])
   }
 
@@ -40,27 +66,42 @@ export default function CategoryAccessPage() {
     fetchAccessList()
   }, [categoryId])
 
-  // 권한 추가
+  // ✅ 권한 추가 (항상 최상위 카테고리에 저장)
   const handleAddAccess = async () => {
     if (!selectedStudent) return
     setLoading(true)
+
+    const rootId = await getRootCategoryId()
+    if (!rootId) {
+      alert("分类不存在")
+      setLoading(false)
+      return
+    }
+
     const { error } = await supabase.from("category_access").insert({
-      category_id: categoryId,
+      category_id: rootId,
       student_id: selectedStudent,
     })
+
     if (error) {
       alert("添加失败: " + error.message)
     } else {
       setSelectedStudent(null)
       fetchAccessList()
     }
+
     setLoading(false)
   }
 
-  // 권한 삭제
+  // ✅ 권한 삭제
   const handleRemoveAccess = async (id: string) => {
     if (!confirm("确定要移除这个权限吗？")) return
-    const { error } = await supabase.from("category_access").delete().eq("id", id)
+
+    const { error } = await supabase
+      .from("category_access")
+      .delete()
+      .eq("id", id)
+
     if (error) {
       alert("删除失败: " + error.message)
     } else {
@@ -77,8 +118,11 @@ export default function CategoryAccessPage() {
         <CardContent className="space-y-6">
           {/* 학생 선택 & 권한 추가 */}
           <div className="flex gap-2">
-            <Select value={selectedStudent ?? ""} onValueChange={setSelectedStudent}>
-              <SelectTrigger className="w-[200px]">
+            <Select
+              value={selectedStudent ?? ""}
+              onValueChange={setSelectedStudent}
+            >
+              <SelectTrigger className="w-[250px]">
                 <SelectValue placeholder="学生选择" />
               </SelectTrigger>
               <SelectContent>
@@ -89,6 +133,7 @@ export default function CategoryAccessPage() {
                 ))}
               </SelectContent>
             </Select>
+
             <Button onClick={handleAddAccess} disabled={loading}>
               {loading ? "添加中..." : "添加权限"}
             </Button>
@@ -98,6 +143,10 @@ export default function CategoryAccessPage() {
           <div>
             <h3 className="font-semibold mb-2">已授权学生</h3>
             <ul className="space-y-2 text-sm">
+              {accessList.length === 0 && (
+                <li className="text-muted-foreground">暂无授权学生</li>
+              )}
+
               {accessList.map((item) => (
                 <li
                   key={item.id}
