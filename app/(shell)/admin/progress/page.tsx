@@ -2,14 +2,19 @@
 export const dynamic = "force-dynamic"
 
 import Link from "next/link"
+import { Suspense } from "react"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { adminSupabase } from "@/lib/supabase/admin"
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
+import {
+  Download, ArrowLeft, Users, BookOpen, TrendingUp,
+  CheckCircle2, Clock, Search
+} from "lucide-react"
 
 type Row = {
   student_id: string
@@ -28,44 +33,46 @@ type Row = {
 }
 
 const PAGE_SIZE = 20
-const ALL = "__all__" // ← 빈 문자열 대신 사용할 센티널
+const ALL = "__all__"
 
 export default async function ProgressPage({
   searchParams,
 }: {
-  searchParams: {
+  searchParams: Promise<{
     q?: string
     category?: string
     classroom?: string
     completed?: "all" | "yes" | "no"
     page?: string
-  }
+  }>
 }) {
   const supabase = await createClient()
 
-  // 로그인 & 권한
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/auth/login")
+
   const { data: me } = await supabase.from("profiles").select("role").eq("id", user.id).single()
   if (!me || !["owner", "administrator"].includes(me.role)) redirect("/dashboard")
 
-  // 필터 값 (문자열로 정리)
-  const q = (searchParams.q || "").trim()
+  // ✅ Next.js 15/16: await로 unwrap
+  const {
+    q: rawQ,
+    category: rawCategoryParam,
+    classroom: rawClassroomParam,
+    completed: rawCompleted,
+    page: rawPage,
+  } = await searchParams
 
-  // ⬇️ "__all__" → "" 로 변환
-  const rawCategory = searchParams.category || ALL
-  const rawClassroom = searchParams.classroom || ALL
+  const q = (rawQ || "").trim()
+  const rawCategory = rawCategoryParam || ALL
+  const rawClassroom = rawClassroomParam || ALL
   const category = rawCategory === ALL ? "" : rawCategory
   const classroom = rawClassroom === ALL ? "" : rawClassroom
-
-  const completed = (searchParams.completed as "all" | "yes" | "no") || "all"
-  const page = Math.max(1, parseInt(searchParams.page || "1", 10))
+  const completed = (rawCompleted as "all" | "yes" | "no") || "all"
+  const page = Math.max(1, parseInt(rawPage || "1", 10))
   const from = (page - 1) * PAGE_SIZE
   const to = from + PAGE_SIZE - 1
 
-  // 필터 드롭다운 소스
   const [catRes, classRes] = await Promise.all([
     adminSupabase.from("categories").select("id, name").order("name"),
     adminSupabase.from("classrooms").select("id, name").order("name"),
@@ -73,14 +80,8 @@ export default async function ProgressPage({
   const categories = catRes.data ?? []
   const classrooms = classRes.data ?? []
 
-  // 데이터 쿼리
   let query = adminSupabase.from("v_progress_admin").select("*", { count: "exact" })
-
-  if (q) {
-    query = query.or(
-      `student_name.ilike.%${q}%,student_email.ilike.%${q}%,video_title.ilike.%${q}%`
-    )
-  }
+  if (q) query = query.or(`student_name.ilike.%${q}%,student_email.ilike.%${q}%,video_title.ilike.%${q}%`)
   if (category) query = query.eq("category_id", category)
   if (completed === "yes") query = query.eq("completed", true)
   if (completed === "no") query = query.eq("completed", false)
@@ -88,231 +89,287 @@ export default async function ProgressPage({
     const cname = classrooms.find((c: any) => c.id === classroom)?.name || ""
     if (cname) query = query.ilike("classrooms", `%${cname}%`)
   }
-
   query = query.order("last_watched_at", { ascending: false, nullsFirst: false }).range(from, to)
 
-  // 결과 가드 처리
   const { data, error, count } = await query
   const loadError = error ? (error.message ?? "Unknown error") : null
   const rows: Row[] = Array.isArray(data) ? (data as any) : []
   const total = typeof count === "number" ? count : rows.length
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
-  // CSV 쿼리스트링 (센티널 사용)
+  // 통계
+  const completedCount = rows.filter(r => r.completed).length
+  const totalStudents = new Set(rows.map(r => r.student_id)).size
+  const completionRate = rows.length > 0 ? Math.round((completedCount / rows.length) * 100) : 0
+
   const exportQuery = new URLSearchParams({
-    q,
-    category: category || ALL,
-    classroom: classroom || ALL,
-    completed,
+    q, category: category || ALL, classroom: classroom || ALL, completed,
   }).toString()
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-primary mb-2">全体学习进度</h1>
-          <p className="text-muted-foreground">按学生/视频查看观看进度，支持筛选与导出</p>
-        </div>
-        <div className="flex gap-2">
-          <Button asChild variant="outline">
-            <Link href="/dashboard">返回仪表板</Link>
-          </Button>
-          <Button asChild variant="default">
-            <Link href={`/api/admin/progress/export?${exportQuery}`}>导出 CSV</Link>
-          </Button>
-        </div>
-      </div>
+    <div className="min-h-screen bg-background">
+      <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
 
-      {/* 로딩/쿼리 에러 배너 */}
-      {loadError && (
-        <Card className="mb-4 border-red-500">
-          <CardContent className="text-red-600 py-3">
-            加载失败：{loadError}
-            <div className="text-xs text-muted-foreground mt-1">
+        {/* 헤더 */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+              <TrendingUp className="w-6 h-6 text-primary" />
+              全体学习进度
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              按学生/视频查看观看进度，支持筛选与导出
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button asChild variant="outline" size="sm">
+              <Link href="/dashboard">
+                <ArrowLeft className="w-4 h-4 mr-1" />
+                返回仪表板
+              </Link>
+            </Button>
+            <Button asChild size="sm">
+              <Link href={`/api/admin/progress/export?${exportQuery}`}>
+                <Download className="w-4 h-4 mr-1" />
+                导出 CSV
+              </Link>
+            </Button>
+          </div>
+        </div>
+
+        {/* 에러 */}
+        {loadError && (
+          <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            <p>加载失败：{loadError}</p>
+            <p className="text-xs mt-1 text-muted-foreground">
               若首次配置，请先执行创建视图脚本：<code>public.v_progress_admin</code>
+            </p>
+          </div>
+        )}
+
+        {/* 통계 카드 */}
+        <div className="grid grid-cols-3 gap-4">
+          <div className="rounded-xl border bg-card p-5 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center shrink-0">
+              <Users className="w-5 h-5 text-blue-500" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">学生总数</p>
+              <p className="text-2xl font-bold">{totalStudents}</p>
+            </div>
+          </div>
+          <div className="rounded-xl border bg-card p-5 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center shrink-0">
+              <BookOpen className="w-5 h-5 text-purple-500" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">记录总数</p>
+              <p className="text-2xl font-bold">{total}</p>
+            </div>
+          </div>
+          <div className="rounded-xl border bg-card p-5 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center shrink-0">
+              <TrendingUp className="w-5 h-5 text-green-500" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">完成率（当页）</p>
+              <p className="text-2xl font-bold">{completionRate}%</p>
+            </div>
+          </div>
+        </div>
+
+        {/* 필터 */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex flex-wrap gap-3">
+
+              <form action="/admin/progress" method="get" className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-muted-foreground">搜索</label>
+                <div className="flex gap-2">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                    <Input name="q" placeholder="姓名 / 邮箱 / 视频标题" defaultValue={q} className="pl-8 w-52" />
+                  </div>
+                  <Button type="submit" variant="secondary" size="sm">应用</Button>
+                </div>
+              </form>
+
+              <form action="/admin/progress" method="get" className="flex flex-col gap-1">
+                <input type="hidden" name="q" value={q} />
+                <input type="hidden" name="classroom" value={rawClassroom} />
+                <input type="hidden" name="completed" value={completed} />
+                <label className="text-xs font-medium text-muted-foreground">分类</label>
+                <div className="flex gap-2">
+                  <Select name="category" defaultValue={category || ALL}>
+                    <SelectTrigger className="w-44"><SelectValue placeholder="全部分类" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL}>全部分类</SelectItem>
+                      {categories.map((c: any) => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button type="submit" variant="secondary" size="sm">应用</Button>
+                </div>
+              </form>
+
+              <form action="/admin/progress" method="get" className="flex flex-col gap-1">
+                <input type="hidden" name="q" value={q} />
+                <input type="hidden" name="category" value={rawCategory} />
+                <input type="hidden" name="completed" value={completed} />
+                <label className="text-xs font-medium text-muted-foreground">班级</label>
+                <div className="flex gap-2">
+                  <Select name="classroom" defaultValue={classroom || ALL}>
+                    <SelectTrigger className="w-44"><SelectValue placeholder="全部班级" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL}>全部班级</SelectItem>
+                      {classrooms.map((c: any) => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button type="submit" variant="secondary" size="sm">应用</Button>
+                </div>
+              </form>
+
+              <form action="/admin/progress" method="get" className="flex flex-col gap-1">
+                <input type="hidden" name="q" value={q} />
+                <input type="hidden" name="category" value={rawCategory} />
+                <input type="hidden" name="classroom" value={rawClassroom} />
+                <label className="text-xs font-medium text-muted-foreground">完成状态</label>
+                <div className="flex gap-2">
+                  <Select name="completed" defaultValue={completed}>
+                    <SelectTrigger className="w-36"><SelectValue placeholder="全部" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">全部</SelectItem>
+                      <SelectItem value="yes">已完成</SelectItem>
+                      <SelectItem value="no">未完成</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button type="submit" variant="secondary" size="sm">应用</Button>
+                </div>
+              </form>
+
             </div>
           </CardContent>
         </Card>
-      )}
 
-      {/* 筛选 */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>筛选</CardTitle>
-        </CardHeader>
-        <CardContent className="grid md:grid-cols-4 gap-4">
-          {/* 검색 */}
-          <div>
-            <Label htmlFor="q">搜索</Label>
-            <form className="flex gap-2" action="/admin/progress" method="get">
-              <Input id="q" name="q" placeholder="姓名 / 邮箱 / 视频标题" defaultValue={q} />
-              <Button type="submit" variant="secondary">
-                应用
-              </Button>
-            </form>
+        {/* 테이블 */}
+        <div className="rounded-xl border bg-card overflow-hidden">
+          <div className="px-5 py-4 border-b flex items-center justify-between">
+            <p className="text-sm font-medium">
+              结果
+              <span className="ml-2 text-muted-foreground font-normal">({total})</span>
+            </p>
+            <p className="text-xs text-muted-foreground">
+              第 {total === 0 ? 0 : from + 1}–{Math.min(to + 1, total)} 条，共 {total} 条
+            </p>
           </div>
 
-          {/* 分类 */}
-          <div>
-            <Label>分类</Label>
-            <form action="/admin/progress" method="get" className="flex">
-              <input type="hidden" name="q" value={q} />
-              <input type="hidden" name="classroom" value={rawClassroom} />
-              <input type="hidden" name="completed" value={completed} />
-              <Select name="category" defaultValue={category ? category : ALL}>
-                <SelectTrigger>
-                  <SelectValue placeholder="全部分类" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL}>全部</SelectItem>
-                  {categories.map((c: any) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button type="submit" variant="secondary" className="ml-2">
-                应用
-              </Button>
-            </form>
-          </div>
-
-          {/* 班级 */}
-          <div>
-            <Label>班级</Label>
-            <form action="/admin/progress" method="get" className="flex">
-              <input type="hidden" name="q" value={q} />
-              <input type="hidden" name="category" value={rawCategory} />
-              <input type="hidden" name="completed" value={completed} />
-              <Select name="classroom" defaultValue={classroom ? classroom : ALL}>
-                <SelectTrigger>
-                  <SelectValue placeholder="全部班级" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL}>全部</SelectItem>
-                  {classrooms.map((c: any) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button type="submit" variant="secondary" className="ml-2">
-                应用
-              </Button>
-            </form>
-          </div>
-
-          {/* 完成状态 */}
-          <div>
-            <Label>完成状态</Label>
-            <form action="/admin/progress" method="get" className="flex">
-              <input type="hidden" name="q" value={q} />
-              <input type="hidden" name="category" value={rawCategory} />
-              <input type="hidden" name="classroom" value={rawClassroom} />
-              <Select name="completed" defaultValue={completed}>
-                <SelectTrigger>
-                  <SelectValue placeholder="全部" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">全部</SelectItem>
-                  <SelectItem value="yes">已完成</SelectItem>
-                  <SelectItem value="no">未完成</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button type="submit" variant="secondary" className="ml-2">
-                应用
-              </Button>
-            </form>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* 결과 테이블 */}
-      <Card>
-        <CardHeader>
-          <CardTitle>结果（{total}）</CardTitle>
-        </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-left">
-              <tr className="border-b">
-                <th className="py-2 pr-4">学生</th>
-                <th className="py-2 pr-4">班级</th>
-                <th className="py-2 pr-4">视频</th>
-                <th className="py-2 pr-4">分类</th>
-                <th className="py-2 pr-4">观看/总时长</th>
-                <th className="py-2 pr-4">% 完成</th>
-                <th className="py-2 pr-4">状态</th>
-                <th className="py-2 pr-4">最后观看</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(rows ?? []).map((r: Row) => (
-                <tr key={`${r.student_id}-${r.video_id}`} className="border-b last:border-none">
-                  <td className="py-2 pr-4">
-                    <div className="font-medium">{r.student_name}</div>
-                    <div className="text-muted-foreground">{r.student_email}</div>
-                  </td>
-                  <td className="py-2 pr-4 whitespace-pre-line">{r.classrooms || "-"}</td>
-                  <td className="py-2 pr-4">{r.video_title}</td>
-                  <td className="py-2 pr-4">{r.category_name || "-"}</td>
-                  <td className="py-2 pr-4">
-                    {fmt(r.watched_duration)} / {fmt(r.video_duration ?? 0)}
-                  </td>
-                  <td className="py-2 pr-4">{(r.percent_viewed ?? 0).toFixed(2)}%</td>
-                  <td className="py-2 pr-4">{r.completed ? "已完成" : "未完成"}</td>
-                  <td className="py-2 pr-4">
-                    {r.last_watched_at ? new Date(r.last_watched_at).toLocaleString() : "-"}
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-muted/30">
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">学生</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">班级</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">视频</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">分类</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide w-44">进度</th>
+                  <th className="px-5 py-3 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wide">状态</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">最后观看</th>
                 </tr>
-              ))}
-
-              {(rows ?? []).length === 0 && !loadError && (
-                <tr>
-                  <td colSpan={8} className="py-8 text-center text-muted-foreground">
-                    暂无数据
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {rows.length === 0 && !loadError ? (
+                  <tr>
+                    <td colSpan={7} className="px-5 py-16 text-center text-muted-foreground text-sm">
+                      暂无数据
+                    </td>
+                  </tr>
+                ) : (
+                  rows.map((r) => {
+                    const pct = Math.min(100, r.percent_viewed ?? 0)
+                    return (
+                      <tr key={`${r.student_id}-${r.video_id}`} className="hover:bg-muted/20 transition-colors">
+                        <td className="px-5 py-4">
+                          <div className="font-medium">{r.student_name}</div>
+                          <div className="text-xs text-muted-foreground">{r.student_email}</div>
+                        </td>
+                        <td className="px-5 py-4 text-sm text-muted-foreground whitespace-pre-line">
+                          {r.classrooms || "-"}
+                        </td>
+                        <td className="px-5 py-4 max-w-[180px]">
+                          <span className="line-clamp-2 text-sm">{r.video_title}</span>
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className="text-xs text-muted-foreground">{r.category_name || "-"}</span>
+                        </td>
+                        <td className="px-5 py-4">
+                          <div className="space-y-1.5">
+                            <div className="flex justify-between text-xs text-muted-foreground">
+                              <span>{fmt(r.watched_duration)} / {fmt(r.video_duration ?? 0)}</span>
+                              <span className="font-medium text-foreground">{pct.toFixed(0)}%</span>
+                            </div>
+                            <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all ${
+                                  r.completed ? "bg-green-500" : pct >= 50 ? "bg-blue-500" : "bg-orange-400"
+                                }`}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-5 py-4 text-center">
+                          {r.completed ? (
+                            <Badge className="text-xs bg-green-500/10 text-green-600 border-green-200 gap-1">
+                              <CheckCircle2 className="w-3 h-3" />
+                              已完成
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary" className="text-xs gap-1">
+                              <Clock className="w-3 h-3" />
+                              进行中
+                            </Badge>
+                          )}
+                        </td>
+                        <td className="px-5 py-4 text-xs text-muted-foreground whitespace-nowrap">
+                          {r.last_watched_at
+                            ? new Date(r.last_watched_at).toLocaleDateString("zh-CN", {
+                                month: "short", day: "numeric",
+                                hour: "2-digit", minute: "2-digit",
+                              })
+                            : "-"}
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
 
           {/* 페이지네이션 */}
-          <div className="flex justify-center gap-2 mt-6">
-            <Button asChild variant="outline" disabled={page <= 1}>
-              <Link
-                href={`/admin/progress?${qs({
-                  q,
-                  category: category || ALL,
-                  classroom: classroom || ALL,
-                  completed,
-                  page: String(page - 1),
-                })}`}
-              >
-                上一页
-              </Link>
-            </Button>
-            <div className="px-3 py-2 text-sm text-muted-foreground">
-              第 {page} / {totalPages} 页
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-5 py-4 border-t bg-muted/10">
+              <p className="text-xs text-muted-foreground">第 {page} / {totalPages} 页</p>
+              <div className="flex gap-2">
+                <Button asChild variant="outline" size="sm" disabled={page <= 1}>
+                  <Link href={`/admin/progress?${qs({ q, category: category || ALL, classroom: classroom || ALL, completed, page: String(page - 1) })}`}>
+                    上一页
+                  </Link>
+                </Button>
+                <Button asChild variant="outline" size="sm" disabled={page >= totalPages}>
+                  <Link href={`/admin/progress?${qs({ q, category: category || ALL, classroom: classroom || ALL, completed, page: String(page + 1) })}`}>
+                    下一页
+                  </Link>
+                </Button>
+              </div>
             </div>
-            <Button asChild variant="outline" disabled={page >= totalPages}>
-              <Link
-                href={`/admin/progress?${qs({
-                  q,
-                  category: category || ALL,
-                  classroom: classroom || ALL,
-                  completed,
-                  page: String(page + 1),
-                })}`}
-              >
-                下一页
-              </Link>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+          )}
+        </div>
+
+      </div>
     </div>
   )
 }
