@@ -26,6 +26,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  FolderOpen, FolderPlus, Search, Pencil, Trash2,
+  ShieldCheck, ChevronRight, Video, LayoutGrid, X
+} from "lucide-react"
+import { cn } from "@/lib/utils"
 
 type Category = {
   id: string
@@ -36,51 +41,28 @@ type Category = {
 
 export default function CategoriesPage() {
   const supabase = createClient()
-  const router = useRouter()
 
-  // 전체 목록
   const [all, setAll] = useState<Category[]>([])
   const [loading, setLoading] = useState(false)
-
-  // 추가 폼
   const [name, setName] = useState("")
   const [parentId, setParentId] = useState<string | null>(null)
-
-  // 필터
   const [q, setQ] = useState("")
   const [parentFilter, setParentFilter] = useState<"all" | "root">("all")
-
-  // 이름 변경
   const [renameOpen, setRenameOpen] = useState(false)
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null)
   const [renameValue, setRenameValue] = useState("")
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
 
-  // 목록 조회
   const fetchCategories = async () => {
     const { data, error } = await supabase
       .from("categories")
-      .select(`
-        id,
-        name,
-        parent_id,
-        videos ( id, title )
-      `) // ← 관계 이름 그대로 사용 (FK: videos.category_id → categories.id)
+      .select(`id, name, parent_id, videos ( id, title )`)
       .order("name", { ascending: true })
-
-    if (error) {
-      console.error("[categories] select error:", error)
-      setAll([])
-      return
-    }
-    setAll((data ?? []) as unknown as Category[])
+    if (!error) setAll((data ?? []) as unknown as Category[])
   }
 
-  useEffect(() => {
-    fetchCategories()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  useEffect(() => { fetchCategories() }, [])
 
-  // 파생 데이터
   const parents = useMemo(() => all.filter((c) => !c.parent_id), [all])
   const childrenMap = useMemo(() => {
     const m = new Map<string, Category[]>()
@@ -99,223 +81,298 @@ export default function CategoriesPage() {
     if (q.trim()) {
       const k = q.trim()
       list = list.filter(
-        (p) => p.name.includes(k) || (childrenMap.get(p.id)?.some((s) => s.name.includes(k)) ?? false),
+        (p) => p.name.includes(k) || (childrenMap.get(p.id)?.some((s) => s.name.includes(k)) ?? false)
       )
-    }
-    if (parentFilter === "root") {
-      // 대분류만 — 이미 parents라 추가 필터 없음(확장 시 남겨둠)
-      list = list
     }
     return list
   }, [parents, childrenMap, q, parentFilter])
 
-  // 추가
+  // 통계
+  const totalVideos = useMemo(() =>
+    all.reduce((acc, c) => acc + (c.videos?.length ?? 0), 0), [all])
+
+  const toggleExpand = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
   const handleAddCategory = async () => {
     if (!name.trim()) return
     setLoading(true)
     const { error } = await supabase.from("categories").insert({
       name: name.trim(),
-      parent_id: parentId, // null이면 대분류
+      parent_id: parentId,
     })
-    if (!error) {
-      setName("")
-      setParentId(null)
-      await fetchCategories()
-    }
+    if (!error) { setName(""); setParentId(null); await fetchCategories() }
     setLoading(false)
   }
 
-  // 삭제 (간단 확인 — 실제로는 FK/트리거로 보호 권장)
   const handleDeleteCategory = async (id: string) => {
     const hasChildren = (childrenMap.get(id)?.length ?? 0) > 0
     const hasVideos =
       (all.find((c) => c.id === id)?.videos?.length ?? 0) > 0 ||
       [...(childrenMap.get(id) ?? [])].some((s) => (s.videos?.length ?? 0) > 0)
-
-    const msg =
-      hasChildren || hasVideos
-        ? "该分类或其子分类下存在内容，删除后将无法恢复。确定继续删除吗？"
-        : "确定要删除这个分类吗？"
-
+    const msg = hasChildren || hasVideos
+      ? "该分类或其子分类下存在内容，删除后将无法恢复。确定继续删除吗？"
+      : "确定要删除这个分类吗？"
     if (!confirm(msg)) return
     const { error } = await supabase.from("categories").delete().eq("id", id)
     if (!error) await fetchCategories()
   }
 
-  // 이름 변경
   const openRename = (cat: Category) => {
     setRenaming({ id: cat.id, name: cat.name })
     setRenameValue(cat.name)
     setRenameOpen(true)
   }
+
   const submitRename = async () => {
     if (!renaming) return
     const newName = renameValue.trim()
-    if (!newName || newName === renaming.name) {
-      setRenameOpen(false)
-      return
-    }
+    if (!newName || newName === renaming.name) { setRenameOpen(false); return }
     const { error } = await supabase.from("categories").update({ name: newName }).eq("id", renaming.id)
-    if (!error) {
-      setRenameOpen(false)
-      setRenaming(null)
-      await fetchCategories()
-    }
+    if (!error) { setRenameOpen(false); setRenaming(null); await fetchCategories() }
   }
 
   return (
-    <div className="space-y-6">
-      {/* 상단 툴바 */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">分类管理</h1>
-          <p className="text-sm text-muted-foreground">维护课程大类与子分类，并管理访问权限</p>
+    <div className="min-h-screen bg-background">
+      <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
+
+        {/* 헤더 */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+              <FolderOpen className="w-6 h-6 text-primary" />
+              分类管理
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1">维护课程大类与子分类，并管理访问权限</p>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Input
-            placeholder="搜索分类名称…"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            className="w-[220px]"
-          />
-          <Select value={parentFilter} onValueChange={(v: "all" | "root") => setParentFilter(v)}>
-            <SelectTrigger className="w-[150px]">
-              <SelectValue placeholder="父级筛选" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">全部父级</SelectItem>
-              <SelectItem value="root">仅大分类</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button variant="outline" onClick={() => { setQ(""); setParentFilter("all") }}>
-            重置
-          </Button>
+        {/* 통계 카드 */}
+        <div className="grid grid-cols-3 gap-4">
+          <div className="rounded-xl border bg-card p-5 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+              <LayoutGrid className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">大分类</p>
+              <p className="text-2xl font-bold">{parents.length}</p>
+            </div>
+          </div>
+          <div className="rounded-xl border bg-card p-5 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center shrink-0">
+              <FolderOpen className="w-5 h-5 text-blue-500" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">子分类</p>
+              <p className="text-2xl font-bold">{all.filter(c => c.parent_id).length}</p>
+            </div>
+          </div>
+          <div className="rounded-xl border bg-card p-5 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center shrink-0">
+              <Video className="w-5 h-5 text-green-500" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">视频总数</p>
+              <p className="text-2xl font-bold">{totalVideos}</p>
+            </div>
+          </div>
         </div>
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* 좌: 추가 폼 */}
-        <Card className="lg:col-span-1 h-max">
-          <CardHeader className="pb-0">
-            <CardTitle>添加分类</CardTitle>
-            <CardDescription>支持创建大分类或子分类</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3 mt-4">
-            <div className="space-y-2">
-              <Label>分类名称</Label>
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="例如：旧约 / 初级班"
-              />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* 좌: 추가 폼 */}
+          <div className="lg:col-span-1">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <FolderPlus className="w-4 h-4" />
+                  添加分类
+                </CardTitle>
+                <CardDescription>支持创建大分类或子分类</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">分类名称</Label>
+                  <Input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="例如：旧约 / 初级班"
+                    onKeyDown={(e) => e.key === "Enter" && handleAddCategory()}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">上级分类（可选）</Label>
+                  <Select
+                    value={parentId ?? "none"}
+                    onValueChange={(val) => setParentId(val === "none" ? null : val)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="无上级分类" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">无上级分类</SelectItem>
+                      {parents.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  onClick={handleAddCategory}
+                  disabled={loading || !name.trim()}
+                  className="w-full"
+                >
+                  {loading ? "添加中…" : "添加分类"}
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* 우: 분류 목록 */}
+          <div className="lg:col-span-2 space-y-4">
+            {/* 검색/필터 */}
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="搜索分类名称…"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              {q && (
+                <Button variant="ghost" size="icon" onClick={() => setQ("")}>
+                  <X className="w-4 h-4" />
+                </Button>
+              )}
             </div>
 
-            <div className="space-y-2">
-              <Label>上级分类（可选）</Label>
-              <Select
-                value={parentId ?? "none"}                   // ← 빈 문자열 금지
-                onValueChange={(val) => setParentId(val === "none" ? null : val)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="无上级分类" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">无上级分类</SelectItem>
-                  {parents.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <Button
-              onClick={handleAddCategory}
-              disabled={loading || !name.trim()}
-              className="w-full bg-[var(--brand)] hover:bg-[var(--brand-hover)]"
-            >
-              {loading ? "添加中…" : "添加分类"}
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* 우: 리스트 */}
-        <Card className="lg:col-span-2">
-          <CardHeader className="pb-0">
-            <CardTitle>分类列表</CardTitle>
-            <CardDescription>点击“管理权限”可配置学生访问</CardDescription>
-          </CardHeader>
-          <CardContent className="mt-4 space-y-6">
+            {/* 분류 목록 */}
             {filteredParents.length === 0 ? (
-              <div className="text-center text-muted-foreground py-12">暂无分类</div>
+              <Card>
+                <CardContent className="py-16 text-center text-muted-foreground text-sm">
+                  暂无分类
+                </CardContent>
+              </Card>
             ) : (
-              filteredParents.map((cat) => {
-                const subs = childrenMap.get(cat.id) ?? []
-                const parentVideoCount = cat.videos?.length ?? 0
-                const subsVideoCount = subs.reduce((acc, s) => acc + (s.videos?.length ?? 0), 0)
+              <div className="space-y-3">
+                {filteredParents.map((cat) => {
+                  const subs = childrenMap.get(cat.id) ?? []
+                  const parentVideoCount = cat.videos?.length ?? 0
+                  const subsVideoCount = subs.reduce((acc, s) => acc + (s.videos?.length ?? 0), 0)
+                  const totalCount = parentVideoCount + subsVideoCount
+                  const isExpanded = expandedIds.has(cat.id)
 
-                return (
-                  <div key={cat.id} className="rounded-lg border">
-                    {/* 대분류 행 */}
-                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between p-4">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-3">
-                          <CardTitle className="text-base truncate">{cat.name}</CardTitle>
-                          <Badge variant="secondary">子类 {subs.length}</Badge>
-                          <Badge variant="outline">视频 {parentVideoCount + subsVideoCount}</Badge>
+                  return (
+                    <Card key={cat.id} className="overflow-hidden">
+                      {/* 대분류 헤더 */}
+                      <div className="px-5 py-4 flex items-center gap-3">
+                        {/* 펼치기 버튼 */}
+                        <button
+                          onClick={() => toggleExpand(cat.id)}
+                          className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          <ChevronRight className={cn(
+                            "w-4 h-4 transition-transform",
+                            isExpanded && "rotate-90"
+                          )} />
+                        </button>
+
+                        {/* 분류명 + 배지 */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold">{cat.name}</span>
+                            <Badge variant="secondary" className="text-xs gap-1">
+                              <FolderOpen className="w-3 h-3" />
+                              子类 {subs.length}
+                            </Badge>
+                            <Badge variant="outline" className="text-xs gap-1">
+                              <Video className="w-3 h-3" />
+                              视频 {totalCount}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">父级分类</p>
                         </div>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          父级分类 · 可分配访问权限给学生或班级
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button asChild size="sm" variant="outline">
-                          <Link href={`/admin/categories/${cat.id}/access`}>管理权限</Link>
-                        </Button>
-                        <Button size="sm" variant="outline" onClick={() => openRename(cat)}>
-                          重命名
-                        </Button>
-                        <Button size="sm" variant="destructive" onClick={() => handleDeleteCategory(cat.id)}>
-                          删除
-                        </Button>
-                      </div>
-                    </div>
 
-                    <Separator />
+                        {/* 액션 버튼 */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Button asChild size="sm" variant="outline" className="gap-1.5 h-8">
+                            <Link href={`/admin/categories/${cat.id}/access`}>
+                              <ShieldCheck className="w-3.5 h-3.5" />
+                              管理权限
+                            </Link>
+                          </Button>
+                          <Button
+                            size="sm" variant="outline"
+                            className="gap-1.5 h-8"
+                            onClick={() => openRename(cat)}
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                            重命名
+                          </Button>
+                          <Button
+                            size="sm" variant="outline"
+                            className="gap-1.5 h-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={() => handleDeleteCategory(cat.id)}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            删除
+                          </Button>
+                        </div>
+                      </div>
 
-                    {/* 하위 분류 */}
-                    <div className="p-4">
-                      {subs.length === 0 ? (
-                        <div className="text-sm text-muted-foreground">暂无子分类</div>
-                      ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          {subs.map((sub) => (
-                            <div key={sub.id} className="rounded-md border p-3 flex items-center justify-between">
-                              <div className="min-w-0">
-                                <div className="font-medium truncate">{sub.name}</div>
-                                <div className="text-xs text-muted-foreground">视频 {sub.videos?.length ?? 0}</div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Button size="sm" variant="outline" onClick={() => openRename(sub)}>
-                                  重命名
-                                </Button>
-                                <Button size="sm" variant="destructive" onClick={() => handleDeleteCategory(sub.id)}>
-                                  删除
-                                </Button>
-                              </div>
+                      {/* 하위 분류 (펼쳐질 때) */}
+                      {isExpanded && (
+                        <div className="border-t bg-muted/20 px-5 py-4">
+                          {subs.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">暂无子分类</p>
+                          ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              {subs.map((sub) => (
+                                <div
+                                  key={sub.id}
+                                  className="rounded-lg border bg-background px-4 py-3 flex items-center justify-between"
+                                >
+                                  <div className="min-w-0">
+                                    <p className="font-medium text-sm truncate">{sub.name}</p>
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                      视频 {sub.videos?.length ?? 0}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                                    <Button
+                                      size="sm" variant="ghost"
+                                      className="h-7 w-7 p-0"
+                                      onClick={() => openRename(sub)}
+                                    >
+                                      <Pencil className="w-3.5 h-3.5" />
+                                    </Button>
+                                    <Button
+                                      size="sm" variant="ghost"
+                                      className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                      onClick={() => handleDeleteCategory(sub.id)}
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              ))}
                             </div>
-                          ))}
+                          )}
                         </div>
                       )}
-                    </div>
-                  </div>
-                )
-              })
+                    </Card>
+                  )
+                })}
+              </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
 
       {/* 이름 변경 다이얼로그 */}
@@ -326,15 +383,18 @@ export default function CategoriesPage() {
           </DialogHeader>
           <div className="space-y-2">
             <Label>新的名称</Label>
-            <Input value={renameValue} onChange={(e) => setRenameValue(e.target.value)} autoFocus />
+            <Input
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && submitRename()}
+              autoFocus
+            />
           </div>
           <DialogFooter className="mt-4">
             <DialogClose asChild>
               <Button variant="outline">取消</Button>
             </DialogClose>
-            <Button onClick={submitRename} className="bg-[var(--brand)] hover:bg-[var(--brand-hover)]">
-              保存
-            </Button>
+            <Button onClick={submitRename}>保存</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

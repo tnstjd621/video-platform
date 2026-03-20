@@ -9,13 +9,15 @@ import { VideoEditForm } from "@/components/video-edit-form"
 import { Separator } from "@/components/ui/separator"
 
 interface PageProps {
-  params: { id: string }   // ✅ App Router는 Promise 아님
+  params: Promise<{ id: string }> // ✅ Next.js 15: Promise로 변경
 }
 
 export const dynamic = "force-dynamic"
 
 export default async function VideoEditPage({ params }: PageProps) {
-  const { id } = params
+  // ✅ Next.js 15: await로 unwrap
+  const { id } = await params
+
   const supabase = await createClient()
 
   // 1) 인증
@@ -35,6 +37,8 @@ export default async function VideoEditPage({ params }: PageProps) {
       id,
       title,
       url,
+      description,
+      thumbnail_url,
       created_at,
       updated_at,
       category_id,
@@ -49,7 +53,7 @@ export default async function VideoEditPage({ params }: PageProps) {
 
   // 4) 카테고리 (선택 목록)
   const { data: categories = [] } = await supabase
-    .from("categories")           // ✅ 테이블명 정정
+    .from("categories")
     .select("id,name")
     .order("name", { ascending: true })
 
@@ -59,18 +63,14 @@ export default async function VideoEditPage({ params }: PageProps) {
       <div className="flex items-center justify-between">
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold truncate">编辑视频</h1>
-          <p className="text-sm text-muted-foreground truncate">
-            修改视频信息和设置
-          </p>
+          <p className="text-sm text-muted-foreground truncate">修改视频信息和设置</p>
         </div>
         <div className="flex items-center gap-2">
           <Button asChild variant="outline">
             <Link href="/admin/videos">返回视频列表</Link>
           </Button>
           <Button asChild variant="outline">
-            <Link href={`/videos/${video.id}`} prefetch>
-              预览
-            </Link>
+            <Link href={`/videos/${video.id}`} prefetch>预览</Link>
           </Button>
         </div>
       </div>
@@ -87,14 +87,13 @@ export default async function VideoEditPage({ params }: PageProps) {
           </CardContent>
         </Card>
 
-        {/* 우: 메타 정보 / 상태 */}
+        {/* 우: 메타 정보 */}
         <Card className="lg:col-span-1">
           <CardHeader className="pb-2">
             <CardTitle>元信息</CardTitle>
             <CardDescription>状态与时间、上传者</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 text-sm">
-            {/* 发布状态 */}
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">当前状态</span>
               <Badge variant={video.is_published ? "default" : "secondary"}>
@@ -132,7 +131,6 @@ export default async function VideoEditPage({ params }: PageProps) {
               )}
             </div>
 
-            {/* (선택) 위험 구역: 오너만 표시 */}
             {me.role === "owner" && (
               <>
                 <Separator />
@@ -155,11 +153,14 @@ export default async function VideoEditPage({ params }: PageProps) {
 function formatDate(v?: string | null) {
   try { return v ? new Date(v).toLocaleString("zh-CN") : "—" } catch { return "—" }
 }
+
 function formatDuration(seconds?: number | null) {
   if (!seconds && seconds !== 0) return "未知"
   const total = Math.max(0, Math.floor(Number(seconds)))
   const h = Math.floor(total / 3600)
   const m = Math.floor((total % 3600) / 60)
   const s = total % 60
-  return h > 0 ? `${h}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}` : `${m}:${String(s).padStart(2,"0")}`
+  return h > 0
+    ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
+    : `${m}:${String(s).padStart(2, "0")}`
 }
