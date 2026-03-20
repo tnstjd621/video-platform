@@ -1,12 +1,16 @@
-export const runtime = "nodejs";            // ✅ Node 런타임 강제
-export const dynamic = "force-dynamic";     // (선택)
+export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
 
 import { NextResponse } from "next/server"
 import { adminSupabase } from "@/lib/supabase/admin"
 
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> } // ✅ Next.js 15/16
+) {
   try {
-    const classroomId = params.id
+    const { id: classroomId } = await params // ✅ await로 unwrap
+
     const body = await req.json().catch(() => ({}))
     const student_id = body?.student_id as string | undefined
     if (!student_id) return NextResponse.json({ error: "student_id is required" }, { status: 400 })
@@ -26,9 +30,13 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   }
 }
 
-export async function DELETE(req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> } // ✅ Next.js 15/16
+) {
   try {
-    const classroomId = params.id
+    const { id: classroomId } = await params // ✅ await로 unwrap
+
     const { searchParams } = new URL(req.url)
     const student_id = searchParams.get("student_id")
     if (!student_id) return NextResponse.json({ error: "student_id is required" }, { status: 400 })

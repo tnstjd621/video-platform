@@ -1,10 +1,12 @@
 // app/announcements/page.tsx
 import { createClient } from "@/lib/supabase/server"
-import { createAdminClient } from "@/lib/supabase/admin" // ✅ service role for author name map
+import { createAdminClient } from "@/lib/supabase/admin"
 import { redirect } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { AnnouncementList } from "@/components/admin/announcement-list" // 재사용: 촘촘 리스트 + 모달
+import { Badge } from "@/components/ui/badge"
+import { AnnouncementList } from "@/components/admin/announcement-list"
 import MarkReadClient from "@/components/announcement-mark-read"
+import { Megaphone, School, Users, Bell } from "lucide-react"
 
 type Raw = Record<string, any>
 type Norm = {
@@ -48,15 +50,12 @@ function normalize(a: Raw): Norm {
 
 export default async function AnnouncementsPage() {
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/auth/login")
 
   const { data: me } = await supabase.from("profiles").select("id,role,name").eq("id", user.id).single()
   if (!me) redirect("/auth/login")
 
-  // 공지 로딩 유틸: 결과 정규화 + author name 매핑
   const mapAuthors = async (list: Norm[]) => {
     const admin = createAdminClient()
     const ids = Array.from(new Set(list.map((x) => x.author_id).filter((v): v is string => !!v)))
@@ -79,9 +78,8 @@ export default async function AnnouncementsPage() {
     return list
   }
 
-  // 학생
+  // ─── 학생 ───
   if (me.role === "student") {
-    // 내가 속한 반들
     const { data: myClasses } = await supabase
       .from("classroom_students")
       .select("classroom_id")
@@ -89,7 +87,6 @@ export default async function AnnouncementsPage() {
 
     const myClassIds = (myClasses ?? []).map((r) => r.classroom_id)
 
-    // 내 반 공지의 announcement id
     let classAnnIds: string[] = []
     if (myClassIds.length > 0) {
       const { data: links } = await supabase
@@ -99,14 +96,12 @@ export default async function AnnouncementsPage() {
       classAnnIds = (links ?? []).map((r) => r.ann_id)
     }
 
-    // 全体公告(学生/both)
     const { data: globalRaw = [] } = await supabase
       .from("announcements")
       .select("*")
       .in("audience", ["students", "both"])
       .order("created_at", { ascending: false })
 
-    // 班级公告(classrooms & 내가 속한 반 매핑)
     let classRaw: Raw[] = []
     if (classAnnIds.length > 0) {
       const { data = [] } = await supabase
@@ -118,59 +113,106 @@ export default async function AnnouncementsPage() {
       classRaw = data
     }
 
-    // 정규화 + 저자 이름 매핑
     const globalList = await mapAuthors(globalRaw.map(normalize))
     const classList = await mapAuthors(classRaw.map(normalize))
-
-    // 읽음표시용 ID
     const markIds = [...new Set([...globalList, ...classList].map((a) => a.id))]
+    const totalCount = globalList.length + classList.length
 
     return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-semibold">公告</h1>
-          <p className="text-sm text-muted-foreground">查看系统公告与班级公告</p>
+      <div className="min-h-screen bg-background">
+        <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
+
+          {/* 헤더 */}
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+              <Bell className="w-6 h-6 text-primary" />
+              公告
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1">查看系统公告与班级公告</p>
+          </div>
+
+          {/* 통계 */}
+          <div className="grid grid-cols-3 gap-4">
+            <div className="rounded-xl border bg-card p-5 flex items-center gap-4">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <Bell className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">公告总数</p>
+                <p className="text-2xl font-bold">{totalCount}</p>
+              </div>
+            </div>
+            <div className="rounded-xl border bg-card p-5 flex items-center gap-4">
+              <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center shrink-0">
+                <Users className="w-5 h-5 text-blue-500" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">全体公告</p>
+                <p className="text-2xl font-bold">{globalList.length}</p>
+              </div>
+            </div>
+            <div className="rounded-xl border bg-card p-5 flex items-center gap-4">
+              <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center shrink-0">
+                <School className="w-5 h-5 text-purple-500" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">班级公告</p>
+                <p className="text-2xl font-bold">{classList.length}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* 전체 공지 */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Users className="w-4 h-4 text-blue-500" />
+                  全体公告
+                  <Badge variant="secondary" className="ml-auto text-xs">{globalList.length}</Badge>
+                </CardTitle>
+                <CardDescription>面向学生或全部用户</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {globalList.length === 0 ? (
+                  <div className="text-center text-muted-foreground py-8 text-sm">暂无公告</div>
+                ) : (
+                  <AnnouncementList items={globalList as any} />
+                )}
+              </CardContent>
+            </Card>
+
+            {/* 반 공지 */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <School className="w-4 h-4 text-purple-500" />
+                  班级公告
+                  <Badge variant="secondary" className="ml-auto text-xs">{classList.length}</Badge>
+                </CardTitle>
+                <CardDescription>仅显示你所在班级的公告</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {classList.length === 0 ? (
+                  <div className="text-center text-muted-foreground py-8 text-sm">暂无公告</div>
+                ) : (
+                  <AnnouncementList items={classList as any} />
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <MarkReadClient ids={markIds} />
         </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* 全体公告 */}
-          <Card>
-            <CardHeader>
-              <CardTitle>全体公告</CardTitle>
-              <CardDescription>面向学生或全部用户</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <AnnouncementList items={globalList as any} />
-              {globalList.length === 0 && (
-                <div className="text-center text-muted-foreground py-8 text-sm">暂无公告</div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* 班级公告 */}
-          <Card>
-            <CardHeader>
-              <CardTitle>班级公告</CardTitle>
-              <CardDescription>仅显示你所在班级的公告</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <AnnouncementList items={classList as any} />
-              {classList.length === 0 && (
-                <div className="text-center text-muted-foreground py-8 text-sm">暂无公告</div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* 읽음표시 업서트 */}
-        <MarkReadClient ids={markIds} />
       </div>
     )
   }
 
-  // 감독자/관리자/오너: 역할별 대상 공지 전체 표시 (촘촘 리스트 + 팝업)
+  // ─── supervisor / admin / owner ───
   const audiences =
-    me.role === "supervisor" ? ["supervisors", "both"] : ["supervisors", "students", "both", "classrooms"]
+    me.role === "supervisor"
+      ? ["supervisors", "both"]
+      : ["supervisors", "students", "both", "classrooms"]
 
   const { data: raw = [] } = await supabase
     .from("announcements")
@@ -181,26 +223,48 @@ export default async function AnnouncementsPage() {
   const list = await mapAuthors(raw.map(normalize))
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">公告</h1>
-        <p className="text-sm text-muted-foreground">查看与你角色相关的公告</p>
+    <div className="min-h-screen bg-background">
+      <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
+
+        {/* 헤더 */}
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            <Megaphone className="w-6 h-6 text-primary" />
+            公告
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">查看与你角色相关的公告</p>
+        </div>
+
+        {/* 통계 */}
+        <div className="rounded-xl border bg-card p-5 flex items-center gap-4 w-fit">
+          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+            <Megaphone className="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">公告总数</p>
+            <p className="text-2xl font-bold">{list.length}</p>
+          </div>
+        </div>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">全部公告</CardTitle>
+              <Badge variant="secondary" className="text-xs">{list.length} 条</Badge>
+            </div>
+            <CardDescription>共 {list.length} 条与你角色相关的公告</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {list.length === 0 ? (
+              <div className="text-center text-muted-foreground py-8 text-sm">暂无公告</div>
+            ) : (
+              <AnnouncementList items={list as any} />
+            )}
+          </CardContent>
+        </Card>
+
+        <MarkReadClient ids={list.map((a) => a.id)} />
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>全部</CardTitle>
-          <CardDescription>共 {list.length} 条</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <AnnouncementList items={list as any} />
-          {list.length === 0 && (
-            <div className="text-center text-muted-foreground py-8 text-sm">暂无公告</div>
-          )}
-        </CardContent>
-      </Card>
-
-      <MarkReadClient ids={list.map((a) => a.id)} />
     </div>
   )
 }

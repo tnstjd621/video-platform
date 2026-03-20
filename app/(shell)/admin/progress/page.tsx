@@ -2,7 +2,6 @@
 export const dynamic = "force-dynamic"
 
 import Link from "next/link"
-import { Suspense } from "react"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { adminSupabase } from "@/lib/supabase/admin"
@@ -10,11 +9,10 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
 import {
-  Download, ArrowLeft, Users, BookOpen, TrendingUp,
-  CheckCircle2, Clock, Search
+  Download, ArrowLeft, Users, BookOpen, TrendingUp, Search
 } from "lucide-react"
+import ProgressAccordion from "@/components/progress-accordion"
 
 type Row = {
   student_id: string
@@ -32,7 +30,6 @@ type Row = {
   last_watched_at: string | null
 }
 
-const PAGE_SIZE = 20
 const ALL = "__all__"
 
 export default async function ProgressPage({
@@ -43,7 +40,6 @@ export default async function ProgressPage({
     category?: string
     classroom?: string
     completed?: "all" | "yes" | "no"
-    page?: string
   }>
 }) {
   const supabase = await createClient()
@@ -60,7 +56,6 @@ export default async function ProgressPage({
     category: rawCategoryParam,
     classroom: rawClassroomParam,
     completed: rawCompleted,
-    page: rawPage,
   } = await searchParams
 
   const q = (rawQ || "").trim()
@@ -69,9 +64,6 @@ export default async function ProgressPage({
   const category = rawCategory === ALL ? "" : rawCategory
   const classroom = rawClassroom === ALL ? "" : rawClassroom
   const completed = (rawCompleted as "all" | "yes" | "no") || "all"
-  const page = Math.max(1, parseInt(rawPage || "1", 10))
-  const from = (page - 1) * PAGE_SIZE
-  const to = from + PAGE_SIZE - 1
 
   const [catRes, classRes] = await Promise.all([
     adminSupabase.from("categories").select("id, name").order("name"),
@@ -80,7 +72,9 @@ export default async function ProgressPage({
   const categories = catRes.data ?? []
   const classrooms = classRes.data ?? []
 
-  let query = adminSupabase.from("v_progress_admin").select("*", { count: "exact" })
+  // 전체 데이터 조회 (페이지네이션 없이 전부)
+  let query = adminSupabase.from("v_progress_admin").select("*")
+
   if (q) query = query.or(`student_name.ilike.%${q}%,student_email.ilike.%${q}%,video_title.ilike.%${q}%`)
   if (category) query = query.eq("category_id", category)
   if (completed === "yes") query = query.eq("completed", true)
@@ -89,17 +83,59 @@ export default async function ProgressPage({
     const cname = classrooms.find((c: any) => c.id === classroom)?.name || ""
     if (cname) query = query.ilike("classrooms", `%${cname}%`)
   }
-  query = query.order("last_watched_at", { ascending: false, nullsFirst: false }).range(from, to)
 
-  const { data, error, count } = await query
+  query = query.order("last_watched_at", { ascending: false, nullsFirst: false })
+
+  const { data, error } = await query
   const loadError = error ? (error.message ?? "Unknown error") : null
   const rows: Row[] = Array.isArray(data) ? (data as any) : []
-  const total = typeof count === "number" ? count : rows.length
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+
+  // 학생별로 그룹핑 (progress-accordion 형식에 맞게)
+  const studentMap = new Map<string, {
+    student_id: string
+    student_name: string
+    student_email: string
+    classroom_name: string
+    videos: {
+      video_id: string
+      video_title: string
+      category_name: string | null
+      duration: number | null
+      watched: number | null
+      percent_viewed: number | null
+      completed: boolean
+      last_watched_at: string | null
+    }[]
+  }>()
+
+  for (const row of rows) {
+    if (!studentMap.has(row.student_id)) {
+      studentMap.set(row.student_id, {
+        student_id: row.student_id,
+        student_name: row.student_name,
+        student_email: row.student_email,
+        classroom_name: row.classrooms?.split("\n")[0] ?? "-",
+        videos: [],
+      })
+    }
+    studentMap.get(row.student_id)!.videos.push({
+      video_id: row.video_id,
+      video_title: row.video_title,
+      category_name: row.category_name,
+      duration: row.video_duration,
+      watched: row.watched_duration,
+      percent_viewed: row.percent_viewed,
+      completed: row.completed,
+      last_watched_at: row.last_watched_at,
+    })
+  }
+
+  const students = Array.from(studentMap.values())
 
   // 통계
+  const totalStudents = students.length
+  const totalVideos = new Set(rows.map(r => r.video_id)).size
   const completedCount = rows.filter(r => r.completed).length
-  const totalStudents = new Set(rows.map(r => r.student_id)).size
   const completionRate = rows.length > 0 ? Math.round((completedCount / rows.length) * 100) : 0
 
   const exportQuery = new URLSearchParams({
@@ -108,7 +144,7 @@ export default async function ProgressPage({
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
+      <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
 
         {/* 헤더 */}
         <div className="flex items-center justify-between">
@@ -118,7 +154,7 @@ export default async function ProgressPage({
               全体学习进度
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
-              按学生/视频查看观看进度，支持筛选与导出
+              按学生查看观看进度，支持筛选与导出
             </p>
           </div>
           <div className="flex gap-2">
@@ -163,8 +199,8 @@ export default async function ProgressPage({
               <BookOpen className="w-5 h-5 text-purple-500" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">记录总数</p>
-              <p className="text-2xl font-bold">{total}</p>
+              <p className="text-xs text-muted-foreground">视频总数</p>
+              <p className="text-2xl font-bold">{totalVideos}</p>
             </div>
           </div>
           <div className="rounded-xl border bg-card p-5 flex items-center gap-4">
@@ -172,7 +208,7 @@ export default async function ProgressPage({
               <TrendingUp className="w-5 h-5 text-green-500" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">完成率（当页）</p>
+              <p className="text-xs text-muted-foreground">整体完成率</p>
               <p className="text-2xl font-bold">{completionRate}%</p>
             </div>
           </div>
@@ -254,132 +290,24 @@ export default async function ProgressPage({
           </CardContent>
         </Card>
 
-        {/* 테이블 */}
-        <div className="rounded-xl border bg-card overflow-hidden">
-          <div className="px-5 py-4 border-b flex items-center justify-between">
-            <p className="text-sm font-medium">
-              结果
-              <span className="ml-2 text-muted-foreground font-normal">({total})</span>
-            </p>
-            <p className="text-xs text-muted-foreground">
-              第 {total === 0 ? 0 : from + 1}–{Math.min(to + 1, total)} 条，共 {total} 条
-            </p>
-          </div>
+        {/* 학생별 아코디언 */}
+        {students.length === 0 ? (
+          <Card>
+            <CardContent className="py-16 text-center text-muted-foreground text-sm">
+              暂无数据
+            </CardContent>
+          </Card>
+        ) : (
+          <ProgressAccordion students={students} />
+        )}
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b bg-muted/30">
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">学生</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">班级</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">视频</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">分类</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide w-44">进度</th>
-                  <th className="px-5 py-3 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wide">状态</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">最后观看</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {rows.length === 0 && !loadError ? (
-                  <tr>
-                    <td colSpan={7} className="px-5 py-16 text-center text-muted-foreground text-sm">
-                      暂无数据
-                    </td>
-                  </tr>
-                ) : (
-                  rows.map((r) => {
-                    const pct = Math.min(100, r.percent_viewed ?? 0)
-                    return (
-                      <tr key={`${r.student_id}-${r.video_id}`} className="hover:bg-muted/20 transition-colors">
-                        <td className="px-5 py-4">
-                          <div className="font-medium">{r.student_name}</div>
-                          <div className="text-xs text-muted-foreground">{r.student_email}</div>
-                        </td>
-                        <td className="px-5 py-4 text-sm text-muted-foreground whitespace-pre-line">
-                          {r.classrooms || "-"}
-                        </td>
-                        <td className="px-5 py-4 max-w-[180px]">
-                          <span className="line-clamp-2 text-sm">{r.video_title}</span>
-                        </td>
-                        <td className="px-5 py-4">
-                          <span className="text-xs text-muted-foreground">{r.category_name || "-"}</span>
-                        </td>
-                        <td className="px-5 py-4">
-                          <div className="space-y-1.5">
-                            <div className="flex justify-between text-xs text-muted-foreground">
-                              <span>{fmt(r.watched_duration)} / {fmt(r.video_duration ?? 0)}</span>
-                              <span className="font-medium text-foreground">{pct.toFixed(0)}%</span>
-                            </div>
-                            <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
-                              <div
-                                className={`h-full rounded-full transition-all ${
-                                  r.completed ? "bg-green-500" : pct >= 50 ? "bg-blue-500" : "bg-orange-400"
-                                }`}
-                                style={{ width: `${pct}%` }}
-                              />
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-5 py-4 text-center">
-                          {r.completed ? (
-                            <Badge className="text-xs bg-green-500/10 text-green-600 border-green-200 gap-1">
-                              <CheckCircle2 className="w-3 h-3" />
-                              已完成
-                            </Badge>
-                          ) : (
-                            <Badge variant="secondary" className="text-xs gap-1">
-                              <Clock className="w-3 h-3" />
-                              进行中
-                            </Badge>
-                          )}
-                        </td>
-                        <td className="px-5 py-4 text-xs text-muted-foreground whitespace-nowrap">
-                          {r.last_watched_at
-                            ? new Date(r.last_watched_at).toLocaleDateString("zh-CN", {
-                                month: "short", day: "numeric",
-                                hour: "2-digit", minute: "2-digit",
-                              })
-                            : "-"}
-                        </td>
-                      </tr>
-                    )
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* 페이지네이션 */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between px-5 py-4 border-t bg-muted/10">
-              <p className="text-xs text-muted-foreground">第 {page} / {totalPages} 页</p>
-              <div className="flex gap-2">
-                <Button asChild variant="outline" size="sm" disabled={page <= 1}>
-                  <Link href={`/admin/progress?${qs({ q, category: category || ALL, classroom: classroom || ALL, completed, page: String(page - 1) })}`}>
-                    上一页
-                  </Link>
-                </Button>
-                <Button asChild variant="outline" size="sm" disabled={page >= totalPages}>
-                  <Link href={`/admin/progress?${qs({ q, category: category || ALL, classroom: classroom || ALL, completed, page: String(page + 1) })}`}>
-                    下一页
-                  </Link>
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
+        {students.length > 0 && (
+          <p className="text-xs text-muted-foreground text-right">
+            共 {students.length} 名学生 · {rows.length} 条记录
+          </p>
+        )}
 
       </div>
     </div>
   )
-}
-
-function fmt(sec: number) {
-  const m = Math.floor(sec / 60)
-  const s = Math.floor(sec % 60)
-  return `${m}:${s.toString().padStart(2, "0")}`
-}
-
-function qs(obj: Record<string, string>) {
-  return new URLSearchParams(obj).toString()
 }
