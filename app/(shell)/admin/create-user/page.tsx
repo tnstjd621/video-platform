@@ -117,6 +117,7 @@ export default function CreateUserPage() {
                     <SelectItem value="student">学生</SelectItem>
                     <SelectItem value="administrator">管理员</SelectItem>
                     <SelectItem value="supervisor">班主任</SelectItem>
+                    <SelectItem value="owner">所有者</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

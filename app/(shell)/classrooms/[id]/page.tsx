@@ -1,161 +1,93 @@
 // app/classrooms/[id]/page.tsx
-"use client"
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import ChatBox from "@/components/chat-box";
+import FileUploadPanel from "@/components/file-upload-panel";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
-import { useEffect, useState } from "react"
-import { useParams, useRouter } from "next/navigation"
-import { createClient } from "@/lib/supabase/client"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
-import { Textarea } from "@/components/ui/textarea"
-import { Input } from "@/components/ui/input"
+interface ClassroomPageProps {
+  params: { id: string };
+}
 
-export default function ClassroomDetailPage() {
-  const params = useParams()
-  const classroomId = params?.id as string
-  const supabase = createClient()
-  const router = useRouter()
+export default async function ClassroomPage({ params }: ClassroomPageProps) {
+  const supabase = await createClient();
 
-  const [classroom, setClassroom] = useState<any>(null)
-  const [students, setStudents] = useState<any[]>([])
-  const [progressData, setProgressData] = useState<any[]>([])
-  const [notices, setNotices] = useState<any[]>([])
-  const [newNotice, setNewNotice] = useState("")
-  const [loading, setLoading] = useState(false)
+  // 현재 로그인 유저 확인
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  // ✅ 반 정보 + 학생 + 공지 불러오기
-  const fetchData = async () => {
-    // 반 정보
-    const { data: cls } = await supabase.from("classrooms").select("*").eq("id", classroomId).single()
-    setClassroom(cls)
+  if (!user) redirect("/auth/login");
 
-    // 반 학생
-    const { data: members } = await supabase
-      .from("classroom_students")
-      .select("profiles(id, name, email)")
-      .eq("classroom_id", classroomId)
-    setStudents(members?.map((m) => m.profiles) || [])
+  // 유저 프로필 조회
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id, name, role")
+    .eq("id", user.id)
+    .single();
 
-    // 학생별 학습 진도
-    const { data: progress } = await supabase
-      .from("student_progress")
-      .select("student_id, video_id, watched_duration, completed, videos(duration, title, category_id)")
-      .in("student_id", members?.map((m) => m.profiles.id) || [])
-    setProgressData(progress || [])
+  if (!profile) redirect("/auth/login");
 
-    // 공지
-    const { data: ns } = await supabase
-      .from("classroom_notices")
-      .select("*")
-      .eq("classroom_id", classroomId)
-      .order("created_at", { ascending: false })
-    setNotices(ns || [])
-  }
+  // 반 정보 조회
+  const { data: classroom } = await supabase
+    .from("classrooms")
+    .select("id, name, supervisor_id")
+    .eq("id", params.id)
+    .single();
 
-  useEffect(() => {
-    if (classroomId) fetchData()
-  }, [classroomId])
+  if (!classroom) redirect("/classrooms");
 
-  // ✅ 공지 추가
-  const handleAddNotice = async () => {
-    if (!newNotice) return
-    setLoading(true)
-    const { error } = await supabase.from("classroom_notices").insert({
-      classroom_id: classroomId,
-      content: newNotice,
-    })
-    if (!error) {
-      setNewNotice("")
-      fetchData()
-    }
-    setLoading(false)
-  }
+  // 접근 권한 확인
+  // - 해당 반 학생이거나
+  // - 해당 반 supervisor이거나
+  // - admin/owner 이어야 함
+  const isStudent = await supabase
+    .from("classroom_students")
+    .select("id")
+    .eq("classroom_id", params.id)
+    .eq("student_id", user.id)
+    .single();
 
-  // ✅ 공지 삭제
-  const handleDeleteNotice = async (id: string) => {
-    if (!confirm("确定要删除这条公告吗？")) return
-    await supabase.from("classroom_notices").delete().eq("id", id)
-    fetchData()
-  }
+  const isSupervisor = classroom.supervisor_id === user.id;
+  const isAdmin = profile.role === "administrator" || profile.role === "owner";
 
-  // 학생별 전체 진도율 계산
-  const getStudentProgress = (studentId: string) => {
-    const records = progressData.filter((p) => p.student_id === studentId)
-    if (records.length === 0) return 0
-    const total = records.reduce((acc, r) => acc + (r.videos?.duration || 0), 0)
-    const watched = records.reduce((acc, r) => acc + (r.watched_duration || 0), 0)
-    if (total === 0) return 0
-    return Math.min(100, Math.round((watched / total) * 100))
+  if (!isStudent.data && !isSupervisor && !isAdmin) {
+    redirect("/classrooms");
   }
 
   return (
-    <div className="min-h-screen bg-background p-6">
-      <Card className="max-w-5xl mx-auto">
-        <CardHeader>
-          <CardTitle>班级详情 - {classroom?.name}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-8">
-          {/* ✅ 학생 진도 리스트 */}
-          <div>
-            <h3 className="font-semibold mb-4">学生进度</h3>
-            <ul className="space-y-3">
-              {students.map((s) => {
-                const progress = getStudentProgress(s.id)
-                return (
-                  <li
-                    key={s.id}
-                    className="flex justify-between items-center border p-3 rounded"
-                  >
-                    <div>
-                      <p className="font-medium">{s.name || s.email}</p>
-                      <p className="text-sm text-muted-foreground">{s.email}</p>
-                    </div>
-                    <div className="w-1/2">
-                      <Progress value={progress} />
-                      <p className="text-sm text-muted-foreground mt-1">
-                        总进度: {progress}%
-                      </p>
-                    </div>
-                    <Button
-                      variant="outline"
-                      onClick={() => router.push(`/classrooms/${classroomId}/student/${s.id}`)}
-                    >
-                      详情
-                    </Button>
-                  </li>
-                )
-              })}
-              {students.length === 0 && <p className="text-muted-foreground">暂无学生</p>}
-            </ul>
+    <div className="min-h-screen bg-background">
+      <div className="max-w-7xl mx-auto px-4 py-6 space-y-4">
+        {/* 반 이름 헤더 */}
+        <div>
+          <h1 className="text-2xl font-bold">{classroom.name}</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {profile.role === "supervisor" || isAdmin
+              ? "管理员视图"
+              : "学生视图"}
+          </p>
+        </div>
+
+        {/* 채팅 + 파일 업로드 영역 */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[600px]">
+          {/* 채팅창 - 2/3 비율 */}
+          <div className="lg:col-span-2 h-full">
+            <ChatBox
+              classroomId={params.id}
+              currentUserId={profile.id}
+            />
           </div>
 
-          {/* ✅ 公告管理 */}
-          <div>
-            <h3 className="font-semibold mb-4">公告</h3>
-            <div className="flex gap-2 mb-3">
-              <Input
-                placeholder="输入公告内容"
-                value={newNotice}
-                onChange={(e) => setNewNotice(e.target.value)}
-              />
-              <Button onClick={handleAddNotice} disabled={loading}>
-                {loading ? "发布中..." : "发布"}
-              </Button>
-            </div>
-            <ul className="space-y-2">
-              {notices.map((n) => (
-                <li key={n.id} className="flex justify-between items-center border p-2 rounded">
-                  <span>{n.content}</span>
-                  <Button variant="destructive" onClick={() => handleDeleteNotice(n.id)}>
-                    删除
-                  </Button>
-                </li>
-              ))}
-              {notices.length === 0 && <p className="text-muted-foreground">暂无公告</p>}
-            </ul>
+          {/* 파일 업로드 패널 - 1/3 비율 */}
+          <div className="lg:col-span-1 h-full">
+            <FileUploadPanel
+              classroomId={params.id}
+              currentUserId={profile.id}
+            />
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
-  )
+  );
 }

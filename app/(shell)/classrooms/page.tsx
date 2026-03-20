@@ -1,4 +1,4 @@
-// app/classrooms/page.tsx (서버 컴포넌트 예시)
+// app/classrooms/page.tsx
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
@@ -7,10 +7,11 @@ import { Button } from "@/components/ui/button";
 
 export default async function ClassroomsPage() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
 
-  // RLS에 맡겨서 허용된 반만 내려오게
   const { data: classrooms, error } = await supabase
     .from("classrooms")
     .select("id, name")
@@ -30,15 +31,22 @@ export default async function ClassroomsPage() {
       </div>
 
       {!classrooms || classrooms.length === 0 ? (
-        <Card><CardContent className="py-8 text-center text-muted-foreground">暂无班级</CardContent></Card>
+        <Card>
+          <CardContent className="py-8 text-center text-muted-foreground">
+            暂无班级
+          </CardContent>
+        </Card>
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
           {classrooms.map((c) => (
             <Card key={c.id} className="hover:shadow-lg transition-shadow">
-              <CardHeader><CardTitle>{c.name}</CardTitle></CardHeader>
+              <CardHeader>
+                <CardTitle>{c.name}</CardTitle>
+              </CardHeader>
               <CardContent>
                 <Button asChild size="sm">
-                  <Link href={`/classroom/${c.id}`}>进入班级</Link>
+                  {/* /classroom -> /classrooms 로 경로 통일 */}
+                  <Link href={`/classrooms/${c.id}`}>进入班级</Link>
                 </Button>
               </CardContent>
             </Card>

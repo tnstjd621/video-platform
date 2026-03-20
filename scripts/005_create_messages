@@ -1,0 +1,110 @@
+-- =============================================
+-- 005: 채팅 메시지 테이블 생성
+-- =============================================
+
+-- 1. 채팅 메시지 테이블
+CREATE TABLE IF NOT EXISTS public.messages (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  classroom_id uuid NOT NULL,
+  sender_id uuid NOT NULL,
+  content text,
+  file_url text,
+  file_name text,
+  file_type text,
+  message_type text NOT NULL DEFAULT 'text' CHECK (message_type = ANY (ARRAY['text', 'file'])),
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT messages_pkey PRIMARY KEY (id),
+  CONSTRAINT messages_classroom_id_fkey FOREIGN KEY (classroom_id) REFERENCES public.classrooms(id) ON DELETE CASCADE,
+  CONSTRAINT messages_sender_id_fkey FOREIGN KEY (sender_id) REFERENCES public.profiles(id) ON DELETE CASCADE
+);
+
+-- =============================================
+-- RLS (Row Level Security)
+-- =============================================
+ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
+
+-- 같은 classroom의 멤버(학생 or supervisor)만 읽기 가능
+CREATE POLICY "classroom members can read messages"
+  ON public.messages FOR SELECT
+  USING (
+    -- 학생인 경우
+    EXISTS (
+      SELECT 1 FROM public.classroom_students
+      WHERE classroom_students.classroom_id = messages.classroom_id
+      AND classroom_students.student_id = auth.uid()
+    )
+    OR
+    -- supervisor인 경우 (자기 반만)
+    EXISTS (
+      SELECT 1 FROM public.classrooms
+      WHERE classrooms.id = messages.classroom_id
+      AND classrooms.supervisor_id = auth.uid()
+    )
+    OR
+    -- admin/owner는 전체 허용
+    EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE profiles.id = auth.uid()
+      AND profiles.role IN ('administrator', 'owner')
+    )
+  );
+
+-- 메시지 전송 (본인 sender_id로만)
+CREATE POLICY "classroom members can insert messages"
+  ON public.messages FOR INSERT
+  WITH CHECK (
+    sender_id = auth.uid()
+    AND (
+      EXISTS (
+        SELECT 1 FROM public.classroom_students
+        WHERE classroom_students.classroom_id = messages.classroom_id
+        AND classroom_students.student_id = auth.uid()
+      )
+      OR
+      EXISTS (
+        SELECT 1 FROM public.classrooms
+        WHERE classrooms.id = messages.classroom_id
+        AND classrooms.supervisor_id = auth.uid()
+      )
+      OR
+      EXISTS (
+        SELECT 1 FROM public.profiles
+        WHERE profiles.id = auth.uid()
+        AND profiles.role IN ('administrator', 'owner')
+      )
+    )
+  );
+
+-- =============================================
+-- Realtime 활성화
+-- =============================================
+ALTER PUBLICATION supabase_realtime ADD TABLE public.messages;
+
+-- =============================================
+-- Storage 버킷 생성 (채팅 파일 업로드용)
+-- Supabase 대시보드 > Storage에서 직접 만들거나 아래 SQL 실행
+-- =============================================
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'chat-files',
+  'chat-files',
+  false,
+  10485760, -- 10MB 제한
+  ARRAY['image/jpeg','image/png','image/gif','image/webp','application/pdf','application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+)
+ON CONFLICT DO NOTHING;
+
+-- Storage RLS
+CREATE POLICY "authenticated users can upload chat files"
+  ON storage.objects FOR INSERT
+  WITH CHECK (
+    bucket_id = 'chat-files'
+    AND auth.role() = 'authenticated'
+  );
+
+CREATE POLICY "classroom members can read chat files"
+  ON storage.objects FOR SELECT
+  USING (
+    bucket_id = 'chat-files'
+    AND auth.role() = 'authenticated'
+  );
