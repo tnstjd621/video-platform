@@ -50,7 +50,6 @@ export default async function ProgressPage({
   const { data: me } = await supabase.from("profiles").select("role").eq("id", user.id).single()
   if (!me || !["owner", "administrator"].includes(me.role)) redirect("/dashboard")
 
-  // ✅ Next.js 15/16: await로 unwrap
   const {
     q: rawQ,
     category: rawCategoryParam,
@@ -72,7 +71,6 @@ export default async function ProgressPage({
   const categories = catRes.data ?? []
   const classrooms = classRes.data ?? []
 
-  // 전체 데이터 조회 (페이지네이션 없이 전부)
   let query = adminSupabase.from("v_progress_admin").select("*")
 
   if (q) query = query.or(`student_name.ilike.%${q}%,student_email.ilike.%${q}%,video_title.ilike.%${q}%`)
@@ -90,7 +88,6 @@ export default async function ProgressPage({
   const loadError = error ? (error.message ?? "Unknown error") : null
   const rows: Row[] = Array.isArray(data) ? (data as any) : []
 
-  // 학생별로 그룹핑 (progress-accordion 형식에 맞게)
   const studentMap = new Map<string, {
     student_id: string
     student_name: string

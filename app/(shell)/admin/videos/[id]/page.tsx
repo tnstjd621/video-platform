@@ -9,28 +9,24 @@ import { VideoEditForm } from "@/components/video-edit-form"
 import { Separator } from "@/components/ui/separator"
 
 interface PageProps {
-  params: Promise<{ id: string }> // ✅ Next.js 15: Promise로 변경
+  params: Promise<{ id: string }>
 }
 
 export const dynamic = "force-dynamic"
 
 export default async function VideoEditPage({ params }: PageProps) {
-  // ✅ Next.js 15: await로 unwrap
   const { id } = await params
 
   const supabase = await createClient()
 
-  // 1) 인증
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/auth/login")
 
-  // 2) 권한
   const { data: me } = await supabase.from("profiles").select("role,name").eq("id", user.id).single()
   if (!me || (me.role !== "administrator" && me.role !== "owner")) {
     redirect("/dashboard")
   }
 
-  // 3) 비디오 + 메타
   const { data: video } = await supabase
     .from("videos")
     .select(`
@@ -51,7 +47,6 @@ export default async function VideoEditPage({ params }: PageProps) {
 
   if (!video) redirect("/admin/videos")
 
-  // 4) 카테고리 (선택 목록)
   const { data: categories = [] } = await supabase
     .from("categories")
     .select("id,name")

@@ -12,11 +12,10 @@ import StudentAssigner from "@/components/classrooms/student-assigner"
 import { ArrowLeft, Users, School, Calendar } from "lucide-react"
 
 interface PageProps {
-  params: Promise<{ id: string }> // ✅ Next.js 15/16
+  params: Promise<{ id: string }>
 }
 
 export default async function ClassroomManagePage({ params }: PageProps) {
-  // ✅ await로 unwrap
   const { id: classroomId } = await params
 
   const supabase = await createClient()

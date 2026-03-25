@@ -14,7 +14,6 @@ export default async function DashboardPage() {
 
   const role = (profile?.role ?? "student") as Role
 
-  // 사이드바 항목들에서 대시보드 자체(/dashboard)는 제외하고 카드로 표시
   const items = NAV_BY_ROLE[role]
     .flatMap(s => s.children)
     .filter(i => i.href !== "/dashboard")

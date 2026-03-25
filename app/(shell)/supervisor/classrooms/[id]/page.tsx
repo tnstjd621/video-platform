@@ -10,9 +10,8 @@ import { MessageCircle, ArrowLeft, Users } from "lucide-react"
 export default async function ClassroomDetailPage({
   params,
 }: {
-  params: Promise<{ id: string }> // ✅ Next.js 15
+  params: Promise<{ id: string }>
 }) {
-  // ✅ await로 unwrap
   const { id } = await params
 
   const supabase = await createClient()

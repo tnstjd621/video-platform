@@ -38,7 +38,7 @@ export default function ChangePasswordPage() {
       setMessage("密码修改成功，请使用新密码重新登录。")
       setPassword("")
       setConfirmPassword("")
-      setTimeout(() => router.push("/auth/login"), 2000) // 2초 후 로그인 페이지 이동
+      setTimeout(() => router.push("/auth/login"), 2000) 
     } catch (err: any) {
       setError(err.message || "修改失败")
     } finally {

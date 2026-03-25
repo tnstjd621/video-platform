@@ -9,7 +9,7 @@ import { VideoPlayer } from "@/components/video-player"
 import { ArrowLeft, Pencil, Clock, User, Calendar, BookOpen, PlayCircle } from "lucide-react"
 
 interface PageProps {
-  params: Promise<{ id: string }> // ✅ Next.js 15/16
+  params: Promise<{ id: string }>
 }
 
 function formatDuration(seconds?: number | null) {
@@ -23,7 +23,6 @@ function formatDuration(seconds?: number | null) {
 }
 
 export default async function VideoPage({ params }: PageProps) {
-  // ✅ await로 unwrap
   const { id } = await params
 
   const supabase = await createClient()

@@ -10,9 +10,8 @@ import ChatBox from "@/components/chat-box"
 export default async function StudentChatPage({
   params,
 }: {
-  params: Promise<{ id: string; studentId: string }> // ✅ Next.js 15
+  params: Promise<{ id: string; studentId: string }>
 }) {
-  // ✅ await로 unwrap
   const { id, studentId } = await params
 
   const supabase = await createClient()

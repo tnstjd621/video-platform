@@ -30,7 +30,6 @@ export default async function UsersManagementPage({
   const { data: me } = await supabase.from("profiles").select("role").eq("id", user.id).single()
   if (!me || (me.role !== "administrator" && me.role !== "owner")) redirect("/dashboard")
 
-  // ✅ Next.js 15: await로 unwrap
   const {
     q: rawQ,
     role: rawRole,

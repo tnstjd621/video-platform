@@ -23,7 +23,7 @@ export default function CategoryAccessPage() {
   const [selectedStudent, setSelectedStudent] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
-  // 🔥 root 카테고리 찾기 (ML)
+  // root 카테고리 찾기 (ML)
   const getRootCategoryId = async () => {
     const { data, error } = await supabase
       .from("categories")
@@ -41,7 +41,7 @@ export default function CategoryAccessPage() {
     return rootId
   }
 
-  // 🔥 학생 목록
+  // 학생 목록
   const fetchStudents = async () => {
     const { data, error } = await supabase
       .from("profiles")
@@ -58,7 +58,7 @@ export default function CategoryAccessPage() {
     setStudents(onlyStudents)
   }
 
-  // 🔥 권한 목록
+  // 권한 목록
   const fetchAccessList = async () => {
     const rootId = await getRootCategoryId()
     if (!rootId) return

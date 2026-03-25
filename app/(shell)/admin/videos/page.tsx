@@ -31,7 +31,6 @@ export default async function VideosManagementPage({
   const { data: me } = await supabase.from("profiles").select("role").eq("id", user.id).single()
   if (!me || (me.role !== "administrator" && me.role !== "owner")) redirect("/dashboard")
 
-  // ✅ Next.js 15: searchParams를 await로 unwrap
   const {
     q: rawQ,
     status: rawStatus,

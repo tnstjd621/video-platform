@@ -8,11 +8,10 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
 interface ClassroomPageProps {
-  params: Promise<{ id: string }>; // ✅ Next.js 15/16
+  params: Promise<{ id: string }>;
 }
 
 export default async function ClassroomPage({ params }: ClassroomPageProps) {
-  // ✅ await로 unwrap
   const { id } = await params;
 
   const supabase = await createClient();

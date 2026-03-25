@@ -1,6 +1,4 @@
 // app/(shell)/layout.tsx
-// ⛔ 글로벌 CSS는 보통 루트(app/layout.tsx)에서만 import 합니다.
-// 루트에서 이미 불러온 경우 이 파일에서는 import 하지 마세요.
 import "@/styles/globals.css"
 
 import { Sidebar } from "@/components/sidebar"
@@ -13,13 +11,11 @@ export const dynamic = "force-dynamic"
 export default async function ShellLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
 
-  // 1) 인증 가드
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
     redirect("/auth/login")
   }
 
-  // 2) 프로필에서 role 조회 (실패 시 student로 폴백)
   const { data: profile } = await supabase
     .from("profiles")
     .select("role")

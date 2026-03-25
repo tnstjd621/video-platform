@@ -17,18 +17,14 @@ export const dynamic = "force-dynamic"
 
 export default async function ProfilePage() {
   const supabase = await createClient()
-
-  // 1) 인증 가드 (보통 (shell) 레이아웃에서 걸리지만 안전하게 한 번 더)
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/auth/login")
 
-  // 2) Supabase Auth 메타에서 역할 읽기 (app_metadata.role 권장)
   const appRole =
     ((user.app_metadata as any)?.role as string | undefined) ??
     ((user.user_metadata as any)?.role as string | undefined) ??
     null
 
-  // 3) 프로필 보장 + 역할 동기화
   const profile = await ensureProfile(supabase, {
     id: user.id,
     email: user.email ?? null,
@@ -130,7 +126,6 @@ async function ensureProfile(
   supabase: Supa,
   seed: { id: string; email: string | null; name: string | null; roleFromAuth: string | null }
 ) {
-  // 1) 먼저 조회
   const { data: found } = await supabase
     .from("profiles")
     .select("id,name,email,role,updated_at")
@@ -139,7 +134,6 @@ async function ensureProfile(
 
   const roleSeed = seed.roleFromAuth?.trim() || null
 
-  // 2) 이미 있으면 app_metadata.role과 불일치 시 동기화
   if (found) {
     if (roleSeed && found.role !== roleSeed) {
       await supabase.from("profiles").update({ role: roleSeed }).eq("id", seed.id)
@@ -148,7 +142,6 @@ async function ensureProfile(
     return found
   }
 
-  // 3) 없으면 삽입 (메타에 있으면 그 값, 없으면 student)
   const { data: inserted } = await supabase
     .from("profiles")
     .insert({
@@ -162,7 +155,6 @@ async function ensureProfile(
 
   if (inserted) return inserted
 
-  // 4) 폴백 재조회
   const { data: retry } = await supabase
     .from("profiles")
     .select("id,name,email,role,updated_at")
