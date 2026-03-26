@@ -80,7 +80,6 @@ function AnnouncementListImpl({
               {current?.title ?? "（无标题）"}
             </DialogTitle>
 
-            {/* DialogDescription 대신 div 사용 (p 안에 div 중첩 방지) */}
             <div className="mt-1 space-y-1 text-sm text-muted-foreground">
               <div>
                 <span className="text-muted-foreground">作者：</span>
@@ -110,7 +109,6 @@ function AnnouncementListImpl({
   )
 }
 
-// ✅ default + named 둘 다 export
 export default function AnnouncementList(props: Parameters<typeof AnnouncementListImpl>[0]) {
   return <AnnouncementListImpl {...props} />
 }

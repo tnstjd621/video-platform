@@ -18,7 +18,6 @@ export function CategoryAccessManagement({ categoryId }: Props) {
   const [loading, setLoading] = useState(false)
   const [isTopCategory, setIsTopCategory] = useState<boolean>(false)
 
-  // 检查该分类是否为顶级分类
   const checkIfTopCategory = async () => {
     const { data, error } = await supabase
       .from("categories")
@@ -31,7 +30,6 @@ export function CategoryAccessManagement({ categoryId }: Props) {
     }
   }
 
-  // 权限列表
   const fetchAccess = async () => {
     const { data, error } = await supabase
       .from("category_access")
@@ -41,7 +39,6 @@ export function CategoryAccessManagement({ categoryId }: Props) {
     if (!error) setAccessList(data || [])
   }
 
-  // 学生列表 (role = student)
   const fetchStudents = async () => {
     const { data, error } = await supabase
       .from("profiles")
@@ -57,14 +54,12 @@ export function CategoryAccessManagement({ categoryId }: Props) {
     checkIfTopCategory()
   }, [categoryId])
 
-  // 权限授予
   const handleGrant = async () => {
     if (!selectedStudent) {
       alert("请选择学生")
       return
     }
 
-    // 检查是否已存在
     const alreadyExists = accessList.some((a) => a.student_id === selectedStudent)
     if (alreadyExists) {
       alert("该学生已被授予访问权限")
@@ -89,7 +84,6 @@ export function CategoryAccessManagement({ categoryId }: Props) {
     setLoading(false)
   }
 
-  // 权限删除
   const handleRevoke = async (id: string) => {
     const { error } = await supabase.from("category_access").delete().eq("id", id)
     if (error) {
@@ -100,12 +94,10 @@ export function CategoryAccessManagement({ categoryId }: Props) {
     }
   }
 
-  // 搜索过滤
   const filteredStudents = students.filter((s) =>
     s.email.toLowerCase().includes(search.toLowerCase())
   )
 
-  // 如果是子分类 → 不允许管理权限
   if (!isTopCategory) {
     return (
       <div className="p-4 border rounded bg-muted">

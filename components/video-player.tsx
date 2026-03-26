@@ -87,7 +87,6 @@ export function VideoPlayer({
   const progressTimer = useRef<ReturnType<typeof setInterval> | null>(null)
   const bufferTimer = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // 우클릭 차단 (컨테이너 자체) ★
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
@@ -96,17 +95,14 @@ export function VideoPlayer({
     return () => el.removeEventListener("contextmenu", block)
   }, [])
 
-  // 전체화면 중에도 우클릭 차단 (문서 전역 capture) ★
   useEffect(() => {
     const onCtx = (e: MouseEvent) => {
       const root = containerRef.current
       if (!root) return
       const fsEl = document.fullscreenElement
-      // 전체화면이 아니더라도, 플레이어 영역 내부에서의 우클릭은 모두 차단
       if (root.contains(e.target as Node)) {
         e.preventDefault()
       }
-      // 전체화면 상태에서 발생한 우클릭도 안전하게 차단
       if (fsEl && (fsEl === root || fsEl.contains(root))) {
         e.preventDefault()
       }
@@ -115,12 +111,10 @@ export function VideoPlayer({
     return () => document.removeEventListener("contextmenu", onCtx, { capture: true } as any)
   }, [])
 
-  // 키보드 컨텍스트 메뉴(Shift+F10, ContextMenu 키) 차단 ★
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
     const onKey = (e: KeyboardEvent) => {
-      // Space는 아래에서 처리하니 여기선 컨텍스트만
       if ((e.shiftKey && e.key === "F10") || e.key === "ContextMenu") {
         e.preventDefault()
         e.stopPropagation()
@@ -175,8 +169,6 @@ export function VideoPlayer({
               fitPlayerToContainer(e.target, containerRef.current, frameRef.current)
             }
 
-            // 2초마다 진행도 저장(학생)
-            
               progressTimer.current = setInterval(async () => {
                 try {
                   const cur = Math.floor(e?.target?.getCurrentTime?.() || 0)
@@ -191,7 +183,6 @@ export function VideoPlayer({
               }, 1000)
 
 
-            // 버퍼 업데이트(부드러운 진행 바)
             bufferTimer.current = setInterval(() => {
               try {
                 const f = e?.target?.getVideoLoadedFraction?.() || 0

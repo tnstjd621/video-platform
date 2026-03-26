@@ -23,7 +23,6 @@ export default function AnnouncementFormSupervisorSimple() {
     }
     setLoading(true)
     try {
-      // RPC: 내 모든 반에 자동 공지
       const { data, error } = await supabase.rpc("create_supervisor_announcement", {
         p_title: title,
         p_body: body,

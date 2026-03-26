@@ -28,7 +28,6 @@ export function VideosToolbar({
   const update = (patch: Record<string, string | number | undefined>) => {
     const usp = new URLSearchParams(search?.toString())
     Object.entries(patch).forEach(([k, v]) => {
-      // "all" 또는 빈 값은 파라미터에서 제거
       if (v === undefined || v === "" || v === "all") usp.delete(k)
       else usp.set(k, String(v))
     })

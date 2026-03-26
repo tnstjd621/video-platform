@@ -63,7 +63,6 @@ export default function ClassroomCreateForm({
     }
   }
 
-  // Select onValueChange 핸들러: 센티넬 값이면 null 로 변환
   const onChangeSupervisor = (val: string) => {
     if (val === NONE) setSupervisorId(null)
     else setSupervisorId(val)
