@@ -1,4 +1,3 @@
-// app/supervisor/classrooms/[id]/students/[studentId]/page.tsx
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import Link from "next/link"
@@ -51,6 +50,7 @@ export default async function StudentChatPage({
     .select("id, file_url, file_name, file_type, created_at")
     .eq("classroom_id", id)
     .eq("sender_id", studentId)
+    .eq("receiver_id", user.id) // 이 supervisor에게 보낸 파일만
     .eq("message_type", "file")
     .order("created_at", { ascending: false })
 
@@ -70,7 +70,6 @@ export default async function StudentChatPage({
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-4">
 
-        {/* 헤더 */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">{student.name}</h1>
@@ -86,10 +85,13 @@ export default async function StudentChatPage({
           </Button>
         </div>
 
-        {/* 채팅 + 파일 목록 */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[600px]">
           <div className="lg:col-span-2 h-full">
-            <ChatBox classroomId={id} currentUserId={user.id} />
+            <ChatBox
+              classroomId={id}
+              currentUserId={user.id}
+              otherUserId={studentId}
+            />
           </div>
 
           <div className="lg:col-span-1 h-full border rounded-xl bg-background shadow-sm flex flex-col">

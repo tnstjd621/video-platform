@@ -9,7 +9,8 @@ export default async function DashboardPage() {
   const { data: profile } = await supabase
     .from("profiles")
     .select("role,name,email")
-    .eq("id", user!.id)
+    if(!user) redirect("/auth/login")
+      .eq("id", user.id)
     .single()
 
   const role = (profile?.role ?? "student") as Role

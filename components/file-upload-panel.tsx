@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 interface FileUploadPanelProps {
   classroomId: string;
   currentUserId: string;
+  receiverId: string;
 }
 
 interface UploadedFile {
@@ -35,6 +36,7 @@ const MAX_SIZE_MB = 10;
 export default function FileUploadPanel({
   classroomId,
   currentUserId,
+  receiverId,
 }: FileUploadPanelProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -95,6 +97,7 @@ export default function FileUploadPanel({
     const { error: msgError } = await supabase.from("messages").insert({
       classroom_id: classroomId,
       sender_id: currentUserId,
+      receiver_id: receiverId,
       content: null,
       file_url: fileUrl,
       file_name: file.name,

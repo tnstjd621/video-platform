@@ -49,11 +49,16 @@ export default async function ClassroomPage({ params }: ClassroomPageProps) {
     redirect("/classrooms");
   }
 
+  // 학생이면 supervisor랑, supervisor/admin이면 이 페이지에서 채팅 안 함
+  // (supervisor는 /supervisor/classrooms/[id]/students/[studentId] 에서 개별 채팅)
+  const otherUserId = isSupervisor || isAdmin ? null : classroom.supervisor_id;
+
+  
+
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-4">
 
-        {/* 헤더 */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">{classroom.name}</h1>
@@ -69,13 +74,22 @@ export default async function ClassroomPage({ params }: ClassroomPageProps) {
           </Button>
         </div>
 
-        {/* 채팅 + 파일 업로드 */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[600px]">
           <div className="lg:col-span-2 h-full">
-            <ChatBox classroomId={id} currentUserId={profile.id} />
+            {otherUserId ? (
+              <ChatBox
+                classroomId={id}
+                currentUserId={profile.id}
+                otherUserId={otherUserId}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full border rounded-xl text-muted-foreground text-sm">
+                请从学生列表进入个别聊天
+              </div>
+            )}
           </div>
           <div className="lg:col-span-1 h-full">
-            <FileUploadPanel classroomId={id} currentUserId={profile.id} />
+            <FileUploadPanel classroomId={id} currentUserId={profile.id} receiverId={classroom.supervisor_id} />
           </div>
         </div>
 
