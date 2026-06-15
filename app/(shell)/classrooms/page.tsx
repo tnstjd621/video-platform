@@ -12,6 +12,31 @@ export default async function ClassroomsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
 
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id, role")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile) redirect("/auth/login");
+
+  const isAdmin = profile.role === "administrator" || profile.role === "owner";
+  const isSupervisor = profile.role === "supervisor";
+
+  // 학생이면 자기 반으로 자동 리다이렉트
+  if (!isAdmin && !isSupervisor) {
+    const { data: myClass } = await supabase
+      .from("classroom_students")
+      .select("classroom_id")
+      .eq("student_id", user.id)
+      .single();
+
+    if (myClass?.classroom_id) {
+      redirect(`/classrooms/${myClass.classroom_id}`);
+    }
+  }
+
+  // supervisor / admin은 전체 반 목록 표시
   const { data: classrooms, error } = await supabase
     .from("classrooms")
     .select("id, name")
@@ -45,7 +70,6 @@ export default async function ClassroomsPage() {
               </CardHeader>
               <CardContent>
                 <Button asChild size="sm">
-                  {/* /classroom -> /classrooms 로 경로 통일 */}
                   <Link href={`/classrooms/${c.id}`}>进入班级</Link>
                 </Button>
               </CardContent>
