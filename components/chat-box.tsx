@@ -36,7 +36,7 @@ export default function ChatBox({ classroomId, currentUserId, otherUserId }: Cha
   const [newMessage, setNewMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const supabase = createClient();
+  const [supabase] = useState(() => createClient());
 
   useEffect(() => {
     const fetchMessages = async () => {
@@ -71,6 +71,7 @@ export default function ChatBox({ classroomId, currentUserId, otherUserId }: Cha
           filter: `classroom_id=eq.${classroomId}`,
         },
         async (payload) => {
+          console.log("payload received: ", payload);
           const { sender_id, receiver_id } = payload.new;
           const isRelevant =
             (sender_id === currentUserId && receiver_id === otherUserId) ||

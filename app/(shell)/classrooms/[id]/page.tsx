@@ -63,7 +63,7 @@ export default async function ClassroomPage({ params }: ClassroomPageProps) {
 
   const isSupervisor = classroom.supervisor_id === user.id;
   const isAdmin = profile.role === "administrator" || profile.role === "owner";
-
+  
   const { data: studentRecord } = await supabase
     .from("classroom_students")
     .select("id")

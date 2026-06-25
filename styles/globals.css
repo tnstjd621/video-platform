@@ -6,7 +6,7 @@
 @custom-variant dark (&:is(.dark *));
 
 :root{
-  --brand:#0c173b;        /* 로그인 버튼과 동일 색 */
+  --brand:#5d6aa7;        /* 로그인 버튼과 동일 색 */
   --brand-900:#0e1f4e;
   --brand-800:#142a68;
   --sidebar-fg:#ffffff;
