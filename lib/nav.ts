@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, UserCircle2, Users2, Video, Upload, Layers, GraduationCap,
-  BarChart2, Megaphone, UserPlus2, BookOpenText, Bell, ClipboardList
+  BarChart2, Megaphone, UserPlus2, BookOpenText, Bell, ClipboardList, BookOpen
 } from "lucide-react"
 
 export type Role = "owner" | "administrator" | "supervisor" | "student"
@@ -25,6 +25,7 @@ export const NAV_BY_ROLE: Record<Role, NavSection[]> = {
       item("/admin/progress", "学习进度", BarChart2, "查看学生进度"),
       item("/admin/announcements", "公告", Megaphone, "发布系统/班级公告"),
       item("/admin/create-user", "创建账户", UserPlus2, "创建新用户"),
+      item("/resources", "资料室", BookOpen, "上传与管理学习资料"),
     ]),
   ],
   administrator: [
@@ -39,6 +40,7 @@ export const NAV_BY_ROLE: Record<Role, NavSection[]> = {
       item("/admin/videos/upload", "上传课程", Upload, "上传新的课程视频"),
       item("/admin/classrooms", "班级管理", GraduationCap, "创建与管理班级"),
       item("/admin/progress", "学习进度", BarChart2, "查看学生进度"),
+      item("/resources", "资料室", BookOpen, "上传与管理学习资料"),
     ]),
   ],
   supervisor: [
@@ -51,6 +53,7 @@ export const NAV_BY_ROLE: Record<Role, NavSection[]> = {
       item("/supervisor/announcements", "班级公告", Megaphone, "发布与管理班级公告"),
       item("/supervisor/progress", "学生进度", BarChart2, "查看本班学生进度"),
       item("/announcements", "系统公告", Bell, "查看平台公告"),
+      item("/resources", "资料室", BookOpen, "上传与管理学习资料"),
     ]),
   ],
   student: [
@@ -63,6 +66,7 @@ export const NAV_BY_ROLE: Record<Role, NavSection[]> = {
       item("/progress", "我的进度", ClipboardList, "查看学习进度与统计"),
       item("/classrooms", "我的班级", GraduationCap, "查看班级与公告"),
       item("/announcements", "公告", Megaphone, "查看系统/班级公告"),
+      item("/resources", "资料室", BookOpen, "下载学习资料"),
     ]),
   ],
 }

@@ -4,7 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   LayoutDashboard, UserCircle2, Users2, Video, Upload, Layers, GraduationCap,
-  BarChart2, Megaphone, UserPlus2, BookOpenText, Bell, ClipboardList
+  BarChart2, Megaphone, UserPlus2, BookOpenText, Bell, ClipboardList, BookOpen
 } from "lucide-react"
 import * as React from "react"
 
@@ -28,6 +28,7 @@ const NAV_BY_ROLE: Record<Role, Array<{title:string; children:Array<{href:string
       item("/admin/progress", "学习进度", BarChart2),
       item("/admin/announcements", "公告", Megaphone),
       item("/admin/create-user", "创建账户", UserPlus2),
+      item("/resources", "资料室", BookOpen),
     ]),
   ],
   administrator: [
@@ -42,6 +43,7 @@ const NAV_BY_ROLE: Record<Role, Array<{title:string; children:Array<{href:string
       item("/admin/videos/upload", "上传课程", Upload),
       item("/admin/classrooms", "班级管理", GraduationCap),
       item("/admin/progress", "学习进度", BarChart2),
+      item("/resources", "资料室", BookOpen),
     ]),
   ],
   supervisor: [
@@ -54,6 +56,7 @@ const NAV_BY_ROLE: Record<Role, Array<{title:string; children:Array<{href:string
       item("/supervisor/announcements", "班级公告", Megaphone),
       item("/supervisor/progress", "学生进度", BarChart2),
       item("/announcements", "系统公告", Bell),
+      item("/resources", "资料室", BookOpen),
     ]),
   ],
   student: [
@@ -66,6 +69,7 @@ const NAV_BY_ROLE: Record<Role, Array<{title:string; children:Array<{href:string
       item("/progress", "我的进度", ClipboardList),
       item("/classrooms", "我的班级", GraduationCap),
       item("/announcements", "公告", Megaphone),
+      item("/resources", "资料室", BookOpen),
     ]),
   ],
 }
@@ -82,8 +86,6 @@ export function Sidebar({ role }: { role: Role }) {
         border-r border-black/10 shadow-xl
       "
     >
-
-
       {/* 스크롤 가능한 네비 */}
       <nav className="h-[calc(100vh-4rem)] overflow-y-auto px-2 md:px-3 py-3 space-y-4">
         {nav.map((sec) => (
