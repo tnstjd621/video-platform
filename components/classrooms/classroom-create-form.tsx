@@ -6,11 +6,9 @@ import { createClient } from "@/lib/supabase/client"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
 
 type Supervisor = { id: string; name: string; email: string }
-
-const NONE = "__none__" as const
 
 export default function ClassroomCreateForm({
   supervisors,
@@ -19,17 +17,22 @@ export default function ClassroomCreateForm({
 }: {
   supervisors: Supervisor[]
   mode?: "create" | "edit"
-  defaultValues?: { id: string; name: string; supervisor_id: string | null }
+  defaultValues?: { id: string; name: string; supervisorIds: string[] }
 }) {
   const supabase = createClient()
   const router = useRouter()
 
   const [name, setName] = useState(defaultValues?.name || "")
-  // string | null 로 관리
-  const [supervisorId, setSupervisorId] = useState<string | null>(defaultValues?.supervisor_id ?? null)
+  const [supervisorIds, setSupervisorIds] = useState<string[]>(defaultValues?.supervisorIds ?? [])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+
+  const toggleSupervisor = (id: string, checked: boolean) => {
+    setSupervisorIds((prev) =>
+      checked ? [...prev, id] : prev.filter((sid) => sid !== id)
+    )
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -37,22 +40,59 @@ export default function ClassroomCreateForm({
     setSuccess(null)
     setLoading(true)
     try {
-      const payload = {
-        name,
-        supervisor_id: supervisorId || null, // null 저장
-      }
-
       if (mode === "create") {
-        const { error: insertError } = await supabase.from("classrooms").insert(payload)
+        const { data: newClassroom, error: insertError } = await supabase
+          .from("classrooms")
+          .insert({ name })
+          .select("id")
+          .single()
         if (insertError) throw insertError
+
+        if (supervisorIds.length > 0) {
+          const rows = supervisorIds.map((sid) => ({
+            classroom_id: newClassroom.id,
+            supervisor_id: sid,
+          }))
+          const { error: csError } = await supabase.from("classroom_supervisors").insert(rows)
+          if (csError) throw csError
+        }
+
         setSuccess("班级创建成功")
         setName("")
-        setSupervisorId(null)
+        setSupervisorIds([])
         router.refresh()
       } else {
         if (!defaultValues?.id) throw new Error("缺少班级ID")
-        const { error: updateError } = await supabase.from("classrooms").update(payload).eq("id", defaultValues.id)
+
+        const { error: updateError } = await supabase
+          .from("classrooms")
+          .update({ name })
+          .eq("id", defaultValues.id)
         if (updateError) throw updateError
+
+        // 기존 목록과 비교하여 추가/삭제분 계산
+        const original = defaultValues.supervisorIds
+        const toAdd = supervisorIds.filter((id) => !original.includes(id))
+        const toRemove = original.filter((id) => !supervisorIds.includes(id))
+
+        if (toAdd.length > 0) {
+          const rows = toAdd.map((sid) => ({
+            classroom_id: defaultValues.id,
+            supervisor_id: sid,
+          }))
+          const { error: addError } = await supabase.from("classroom_supervisors").insert(rows)
+          if (addError) throw addError
+        }
+
+        if (toRemove.length > 0) {
+          const { error: removeError } = await supabase
+            .from("classroom_supervisors")
+            .delete()
+            .eq("classroom_id", defaultValues.id)
+            .in("supervisor_id", toRemove)
+          if (removeError) throw removeError
+        }
+
         setSuccess("已更新班级信息")
         router.refresh()
       }
@@ -63,11 +103,6 @@ export default function ClassroomCreateForm({
     }
   }
 
-  const onChangeSupervisor = (val: string) => {
-    if (val === NONE) setSupervisorId(null)
-    else setSupervisorId(val)
-  }
-
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-2">
@@ -76,25 +111,25 @@ export default function ClassroomCreateForm({
       </div>
 
       <div className="space-y-2">
-        <Label>监督者（可选）</Label>
-        <Select
-          // Radix는 undefined 일 때 placeholder가 보임
-          value={supervisorId ?? undefined}
-          onValueChange={onChangeSupervisor}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="选择监督者（可不选）" />
-          </SelectTrigger>
-          <SelectContent>
-            {/* 빈 문자열 대신 센티넬 값 사용 */}
-            <SelectItem value={NONE}>（不指定）</SelectItem>
-            {supervisors.map((s) => (
-              <SelectItem key={s.id} value={s.id}>
-                {s.name}（{s.email}）
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <Label>班主任（可多选）</Label>
+        <div className="rounded-md border max-h-48 overflow-y-auto p-2 space-y-1">
+          {supervisors.length === 0 ? (
+            <p className="text-xs text-muted-foreground px-2 py-1">暂无可选班主任</p>
+          ) : (
+            supervisors.map((s) => (
+              <label
+                key={s.id}
+                className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/50 cursor-pointer text-sm"
+              >
+                <Checkbox
+                  checked={supervisorIds.includes(s.id)}
+                  onCheckedChange={(checked) => toggleSupervisor(s.id, checked === true)}
+                />
+                <span>{s.name}（{s.email}）</span>
+              </label>
+            ))
+          )}
+        </div>
       </div>
 
       {error && <p className="text-red-600 text-sm">{error}</p>}

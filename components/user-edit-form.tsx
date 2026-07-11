@@ -42,7 +42,6 @@ export function UserEditForm({ user, currentUserRole }: UserEditFormProps) {
         .update({
           name,
           role,
-          updated_at: new Date().toISOString(),
         })
         .eq("id", user.id)
 
@@ -81,6 +80,7 @@ export function UserEditForm({ user, currentUserRole }: UserEditFormProps) {
           <SelectContent>
             <SelectItem value="student">学生</SelectItem>
             <SelectItem value="administrator">管理员</SelectItem>
+            <SelectItem value="supervisor">班主任</SelectItem>
             {currentUserRole === "owner" && <SelectItem value="owner">系统所有者</SelectItem>}
           </SelectContent>
         </Select>

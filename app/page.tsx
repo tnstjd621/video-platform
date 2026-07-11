@@ -13,6 +13,7 @@ export default async function HomePage() {
   if (user) {
     redirect("/dashboard")
   }
+  redirect("/auth/login")
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-accent to-background">

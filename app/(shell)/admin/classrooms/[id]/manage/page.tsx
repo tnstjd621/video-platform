@@ -9,7 +9,8 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import StudentAssigner from "@/components/classrooms/student-assigner"
-import { ArrowLeft, Users, School, Calendar } from "lucide-react"
+import SupervisorAssigner from "@/components/classrooms/supervisor-assigner"
+import { ArrowLeft, Users, School, Calendar, UserCog } from "lucide-react"
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -35,32 +36,48 @@ export default async function ClassroomManagePage({ params }: PageProps) {
 
   const { data: classroom } = await supabase
     .from("classrooms")
-    .select("id, name, supervisor_id, created_at")
+    .select("id, name, created_at")
     .eq("id", classroomId)
     .single()
 
   if (!classroom) redirect("/admin/classrooms")
 
-  // supervisor 정보
-  const { data: supervisor } = await supabase
-    .from("profiles")
-    .select("name, email")
-    .eq("id", classroom.supervisor_id)
-    .single()
+  // 이 반에 배정된 supervisor 전체 조회
+  const { data: csRows, error: csError } = await supabase
+  .from("classroom_supervisors")
+  .select("supervisor_id")
+  .eq("classroom_id", classroomId)
 
-  const { data: csRows = [] } = await supabase
-    .from("classroom_students")
-    .select("student_id")
-    .eq("classroom_id", classroomId)
+if (csError) {
+  console.error("classroom_supervisors 조회 에러:", csError)
+}
 
-  const studentIds = csRows.map((r) => r.student_id)
+const supervisorIds = (csRows ?? []).map((r) => r.supervisor_id)
 
-  const profiles =
+  const supervisors =
+    supervisorIds.length > 0
+      ? (await adminSupabase.from("profiles").select("id, name, email").in("id", supervisorIds)).data ?? []
+      : []
+
+  const existingSupervisors = supervisors.map((s: any) => ({
+    supervisor_id: s.id as string,
+    name: s.name as string,
+    email: s.email as string,
+  }))
+
+  const { data: studentRows } = await supabase
+  .from("classroom_students")
+  .select("student_id")
+  .eq("classroom_id", classroomId)
+
+  const studentIds = (studentRows ?? []).map((r) => r.student_id)
+
+  const studentProfiles =
     studentIds.length > 0
       ? (await adminSupabase.from("profiles").select("id, name, email").in("id", studentIds)).data ?? []
       : []
 
-  const existingStudents = profiles.map((p) => ({
+  const existingStudents = studentProfiles.map((p) => ({
     student_id: p.id as string,
     name: (p as any).name as string,
     email: (p as any).email as string,
@@ -99,10 +116,13 @@ export default async function ClassroomManagePage({ params }: PageProps) {
               <div className="flex-1 min-w-0">
                 <h2 className="text-lg font-semibold">{classroom.name}</h2>
                 <div className="flex items-center gap-2 mt-1 flex-wrap">
-                  {supervisor ? (
-                    <Badge variant="outline" className="text-xs">
-                      班主任：{supervisor.name}
-                    </Badge>
+                  {supervisors.length > 0 ? (
+                    supervisors.map((s: any) => (
+                      <Badge key={s.id} variant="outline" className="text-xs gap-1">
+                        <UserCog className="w-3 h-3" />
+                        {s.name}
+                      </Badge>
+                    ))
                   ) : (
                     <Badge variant="secondary" className="text-xs">未指定班主任</Badge>
                   )}
@@ -117,6 +137,25 @@ export default async function ClassroomManagePage({ params }: PageProps) {
                 </div>
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* 班主任 배정 */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <UserCog className="w-4 h-4" />
+              班主任分配
+            </CardTitle>
+            <CardDescription>
+              为该班级分配一位或多位班主任
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SupervisorAssigner
+              classroomId={classroom.id}
+              existingSupervisors={existingSupervisors}
+            />
           </CardContent>
         </Card>
 

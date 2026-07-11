@@ -8,6 +8,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import ClassroomCreateForm from "@/components/classrooms/classroom-create-form"
+import { DeleteClassroomButton } from "@/components/classrooms/delete-classroom-button"
 import { School, Users, UserCog, PlusCircle, Settings } from "lucide-react"
 
 export default async function ClassroomsPage() {
@@ -35,10 +36,22 @@ export default async function ClassroomsPage() {
 
   const { data: classroomsData, error: classroomsErr } = await supabase
     .from("classrooms")
-    .select("id, name, supervisor_id, created_at")
+    .select("id, name, created_at")
     .order("created_at", { ascending: false })
 
   const classrooms = classroomsData ?? []
+
+  // 반-supervisor 매핑 조회
+  const { data: csRows } = await supabase
+    .from("classroom_supervisors")
+    .select("classroom_id, supervisor_id")
+
+  const supervisorMap = new Map<string, string[]>()
+  csRows?.forEach((r) => {
+    const list = supervisorMap.get(r.classroom_id) ?? []
+    list.push(r.supervisor_id)
+    supervisorMap.set(r.classroom_id, list)
+  })
 
   // 학생 수 조회
   const { data: studentCounts } = await supabase
@@ -136,7 +149,10 @@ export default async function ClassroomsPage() {
             ) : (
               <div className="space-y-3">
                 {classrooms.map((c: any) => {
-                  const supervisor = supervisors.find(s => s.id === c.supervisor_id)
+                  const classroomSupervisorIds = supervisorMap.get(c.id) ?? []
+                  const classroomSupervisors = supervisors.filter((s) =>
+                    classroomSupervisorIds.includes(s.id)
+                  )
                   const studentCount = countMap.get(c.id) ?? 0
 
                   return (
@@ -152,11 +168,13 @@ export default async function ClassroomsPage() {
                           <div className="flex-1 min-w-0">
                             <p className="font-semibold truncate">{c.name}</p>
                             <div className="flex items-center gap-2 mt-1 flex-wrap">
-                              {supervisor ? (
-                                <Badge variant="outline" className="text-xs gap-1">
-                                  <UserCog className="w-3 h-3" />
-                                  {supervisor.name}
-                                </Badge>
+                              {classroomSupervisors.length > 0 ? (
+                                classroomSupervisors.map((s) => (
+                                  <Badge key={s.id} variant="outline" className="text-xs gap-1">
+                                    <UserCog className="w-3 h-3" />
+                                    {s.name}
+                                  </Badge>
+                                ))
                               ) : (
                                 <Badge variant="secondary" className="text-xs">未指定班主任</Badge>
                               )}
@@ -181,6 +199,11 @@ export default async function ClassroomsPage() {
                                 学生分配
                               </Link>
                             </Button>
+                            <DeleteClassroomButton
+                              classroomId={c.id}
+                              classroomName={c.name}
+                              studentCount={studentCount}
+                            />
                           </div>
                         </div>
                       </CardContent>

@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server"
 import { Button } from "@/components/ui/button"
 import { RoleBadge } from "@/components/admin/role-badge"
 import { UsersToolbar } from "@/components/admin/users-toolbar"
+import { DeleteUserButton } from "@/components/admin/delete-user-button"
 import { Users, ShieldCheck, GraduationCap, UserCog } from "lucide-react"
 
 type SearchParams = {
@@ -192,9 +193,12 @@ export default async function UsersManagementPage({
 
                       {/* 액션 */}
                       <td className="px-5 py-4 text-right">
-                        <Button asChild variant="outline" size="sm" className="h-8">
-                          <Link href={`/admin/users/${u.id}`}>编辑</Link>
-                        </Button>
+                        <div className="flex items-center justify-end gap-2">
+                          <Button asChild variant="outline" size="sm" className="h-8">
+                            <Link href={`/admin/users/${u.id}`}>编辑</Link>
+                          </Button>
+                          <DeleteUserButton userId={u.id} userName={u.name ?? u.email ?? "此用户"} />
+                        </div>
                       </td>
                     </tr>
                   ))
