@@ -26,7 +26,16 @@ export default async function ClassroomDetailPage({
     .single()
 
   if (!classroom) redirect("/supervisor/classrooms")
-  if (classroom.supervisor_id !== user.id) redirect("/supervisor/classrooms")
+
+  // supervisor_id 대신 classroom_supervisors 조인 테이블로 권한 체크
+  const { data: membership } = await supabase
+    .from("classroom_supervisors")
+    .select("id")
+    .eq("classroom_id", id)
+    .eq("supervisor_id", user.id)
+    .maybeSingle()
+
+  if (!membership) redirect("/supervisor/classrooms")
 
   const { data: students } = await supabase
     .from("classroom_students")

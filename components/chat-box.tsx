@@ -57,45 +57,62 @@ export default function ChatBox({ classroomId, currentUserId, otherUserId }: Cha
       if (!error && data) setMessages(data as Message[]);
     };
 
-    fetchMessages();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
 
-    
-    const channel = supabase
-      .channel(`messages:${classroomId}:${currentUserId}:${otherUserId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-          filter: `classroom_id=eq.${classroomId}`,
-        },
-        async (payload) => {
-          console.log("payload received: ", payload);
-          const { sender_id, receiver_id } = payload.new;
-          const isRelevant =
-            (sender_id === currentUserId && receiver_id === otherUserId) ||
-            (sender_id === otherUserId && receiver_id === currentUserId);
-          if (!isRelevant) return;
+    const setupRealtime = async () => {
+      // Realtime 소켓에 현재 세션 토큰을 명시적으로 전달 (RLS 인증 타이밍 문제 방지)
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        supabase.realtime.setAuth(session.access_token);
+      }
 
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("name, role")
-            .eq("id", sender_id)
-            .single();
+      await fetchMessages();
 
-          setMessages((prev) => [
-            ...prev,
-            {
-              ...(payload.new as Message),
-              profiles: profile || { name: "알수없음", role: "student" },
-            },
-          ]);
-        }
-      )
-      .subscribe();
+      channel = supabase
+        .channel(`messages:${classroomId}:${currentUserId}:${otherUserId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "messages",
+            filter: `classroom_id=eq.${classroomId}`,
+          },
+          async (payload) => {
+            console.log("payload received: ", payload);
+            const { sender_id, receiver_id } = payload.new;
+            const isRelevant =
+              (sender_id === currentUserId && receiver_id === otherUserId) ||
+              (sender_id === otherUserId && receiver_id === currentUserId);
+            if (!isRelevant) return;
 
-    return () => { supabase.removeChannel(channel); };
+            const { data: profile } = await supabase
+              .from("profiles")
+              .select("name, role")
+              .eq("id", sender_id)
+              .single();
+
+            setMessages((prev) => [
+              ...prev,
+              {
+                ...(payload.new as Message),
+                profiles: profile || { name: "알수없음", role: "student" },
+              },
+            ]);
+          }
+        )
+        .subscribe((status) => {
+          console.log("채널 구독 상태:", status);
+        });
+    };
+
+    setupRealtime();
+
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+    };
   }, [classroomId, currentUserId, otherUserId]);
 
   useEffect(() => {

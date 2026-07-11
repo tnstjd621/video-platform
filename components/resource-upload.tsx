@@ -8,7 +8,11 @@ import { Label } from "@/components/ui/label"
 import { Upload, Loader2 } from "lucide-react"
 import { useRouter } from "next/navigation"
 
-export default function ResourceUpload() {
+export default function ResourceUpload({
+  visibility = "public",
+}: {
+  visibility?: "public" | "restricted"
+}) {
   const [file, setFile] = useState<File | null>(null)
   const [description, setDescription] = useState("")
   const [isUploading, setIsUploading] = useState(false)
@@ -43,6 +47,7 @@ export default function ResourceUpload() {
         file_name: file.name,
         file_type: file.type,
         file_size: file.size,
+        visibility,
       })
 
       if (dbError) throw dbError

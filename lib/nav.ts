@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, UserCircle2, Users2, Video, Upload, Layers, GraduationCap,
-  BarChart2, Megaphone, UserPlus2, BookOpenText, Bell, ClipboardList, BookOpen
+  BarChart2, Megaphone, UserPlus2, BookOpenText, Bell, ClipboardList, BookOpen, Lock
 } from "lucide-react"
 
 export type Role = "owner" | "administrator" | "supervisor" | "student"
@@ -18,6 +18,7 @@ export const NAV_BY_ROLE: Record<Role, NavSection[]> = {
     ]),
     section("管理", [
       item("/admin/users", "账户管理", Users2, "查看/编辑/分配角色"),
+      item("/admin/courses", "全部课程", BookOpenText, "查看所有视频课程"),
       item("/admin/videos", "视频管理", Video, "管理与编辑视频"),
       item("/admin/categories", "分类管理", Layers, "维护课程分类"),
       item("/admin/videos/upload", "上传课程", Upload, "上传新的课程视频"),
@@ -25,7 +26,8 @@ export const NAV_BY_ROLE: Record<Role, NavSection[]> = {
       item("/admin/progress", "学习进度", BarChart2, "查看学生进度"),
       item("/admin/announcements", "公告", Megaphone, "发布系统/班级公告"),
       item("/admin/create-user", "创建账户", UserPlus2, "创建新用户"),
-      item("/resources", "资料室", BookOpen, "上传与管理学习资料"),
+      item("/resources", "全体资料室", BookOpen, "上传与管理学习资料"),
+      item("/resources/restricted", "权限资料室", Lock, "仅班主任及以上可见的资料"),
     ]),
   ],
   administrator: [
@@ -35,12 +37,14 @@ export const NAV_BY_ROLE: Record<Role, NavSection[]> = {
     ]),
     section("管理", [
       item("/admin/users", "账户管理", Users2, "查看/编辑/分配角色"),
+      item("/admin/courses", "全部课程", BookOpenText, "查看所有视频课程"),
       item("/admin/videos", "视频管理", Video, "管理与编辑视频"),
       item("/admin/categories", "分类管理", Layers, "维护课程分类"),
       item("/admin/videos/upload", "上传课程", Upload, "上传新的课程视频"),
       item("/admin/classrooms", "班级管理", GraduationCap, "创建与管理班级"),
       item("/admin/progress", "学习进度", BarChart2, "查看学生进度"),
-      item("/resources", "资料室", BookOpen, "上传与管理学习资料"),
+      item("/resources", "全体资料室", BookOpen, "上传与管理学习资料"),
+      item("/resources/restricted", "权限资料室", Lock, "仅班主任及以上可见的资料"),
     ]),
   ],
   supervisor: [
@@ -50,10 +54,12 @@ export const NAV_BY_ROLE: Record<Role, NavSection[]> = {
     ]),
     section("班主任", [
       item("/supervisor/classrooms", "我的班级", GraduationCap, "管理所负责的班级"),
+      item("/admin/courses", "全部课程", BookOpenText, "查看所有视频课程"),
       item("/supervisor/announcements", "班级公告", Megaphone, "发布与管理班级公告"),
       item("/supervisor/progress", "学生进度", BarChart2, "查看本班学生进度"),
       item("/announcements", "系统公告", Bell, "查看平台公告"),
-      item("/resources", "资料室", BookOpen, "上传与管理学习资料"),
+      item("/resources", "全体资料室", BookOpen, "上传与管理学习资料"),
+      item("/resources/restricted", "权限资料室", Lock, "仅班主任及以上可见的资料"),
     ]),
   ],
   student: [

@@ -20,11 +20,21 @@ export default async function StudentChatPage({
 
   const { data: classroom } = await supabase
     .from("classrooms")
-    .select("id, name, supervisor_id")
+    .select("id, name")
     .eq("id", id)
     .single()
 
-  if (!classroom || classroom.supervisor_id !== user.id) {
+  if (!classroom) redirect("/supervisor/classrooms")
+
+  // supervisor_id 대신 classroom_supervisors 조인 테이블로 권한 체크
+  const { data: supervisorMembership } = await supabase
+    .from("classroom_supervisors")
+    .select("id")
+    .eq("classroom_id", id)
+    .eq("supervisor_id", user.id)
+    .maybeSingle()
+
+  if (!supervisorMembership) {
     redirect("/supervisor/classrooms")
   }
 

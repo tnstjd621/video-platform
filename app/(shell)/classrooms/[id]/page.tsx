@@ -2,13 +2,13 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import ChatBox from "@/components/chat-box";
+import ClassroomSupervisorChat from "@/components/classroom-supervisor-chat";
 import FileUploadPanel from "@/components/file-upload-panel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
-import { ArrowLeft, Bell, School, Megaphone } from "lucide-react";
+import { ArrowLeft, School } from "lucide-react";
 import { AnnouncementList } from "@/components/admin/announcement-list";
 import MarkReadClient from "@/components/announcement-mark-read";
 
@@ -56,14 +56,21 @@ export default async function ClassroomPage({ params }: ClassroomPageProps) {
 
   const { data: classroom } = await supabase
     .from("classrooms")
-    .select("id, name, supervisor_id")
+    .select("id, name")
     .eq("id", id)
     .single();
   if (!classroom) redirect("/classrooms");
 
-  const isSupervisor = classroom.supervisor_id === user.id;
+  // classroom_supervisors 기준으로 이 반의 supervisor 전원 조회
+  const { data: csRows } = await supabase
+    .from("classroom_supervisors")
+    .select("supervisor_id")
+    .eq("classroom_id", id);
+
+  const supervisorIds = (csRows ?? []).map((r) => r.supervisor_id);
+  const isSupervisor = supervisorIds.includes(user.id);
   const isAdmin = profile.role === "administrator" || profile.role === "owner";
-  
+
   const { data: studentRecord } = await supabase
     .from("classroom_students")
     .select("id")
@@ -75,7 +82,23 @@ export default async function ClassroomPage({ params }: ClassroomPageProps) {
     redirect("/classrooms");
   }
 
-  const otherUserId = isSupervisor || isAdmin ? null : classroom.supervisor_id;
+  // 학생이 볼 supervisor 목록 (이름/이메일 포함)
+  let supervisorList: { id: string; name: string; email: string }[] = []
+  if (!isSupervisor && !isAdmin && supervisorIds.length > 0) {
+    const admin = createAdminClient()
+    const { data: profs } = await admin
+      .from("profiles")
+      .select("id, name, email")
+      .in("id", supervisorIds)
+    supervisorList = (profs ?? []).map((p: any) => ({
+      id: p.id,
+      name: p.name ?? p.email ?? "老师",
+      email: p.email ?? "",
+    }))
+  }
+
+  // FileUploadPanel용 receiver (첫 번째 supervisor로 기본 설정)
+  const fallbackReceiverId = supervisorIds[0] ?? ""
 
   // ── 반 공고 fetch ──
   const { data: annLinks } = await supabase
@@ -94,7 +117,6 @@ export default async function ClassroomPage({ params }: ClassroomPageProps) {
       .in("id", annIds)
       .order("created_at", { ascending: false });
 
-    // 작성자 이름 매핑
     const admin = createAdminClient();
     const authorIds = Array.from(
       new Set(annRaw.map((a) => a.created_by).filter(Boolean))
@@ -160,23 +182,23 @@ export default async function ClassroomPage({ params }: ClassroomPageProps) {
         {/* 채팅 + 파일 업로드 */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[600px]">
           <div className="lg:col-span-2 h-full">
-            {otherUserId ? (
-              <ChatBox
-                classroomId={id}
-                currentUserId={profile.id}
-                otherUserId={otherUserId}
-              />
-            ) : (
+            {isSupervisor || isAdmin ? (
               <div className="flex items-center justify-center h-full border rounded-xl text-muted-foreground text-sm">
                 请从学生列表进入个别聊天
               </div>
+            ) : (
+              <ClassroomSupervisorChat
+                classroomId={id}
+                currentUserId={profile.id}
+                supervisors={supervisorList}
+              />
             )}
           </div>
           <div className="lg:col-span-1 h-full">
             <FileUploadPanel
               classroomId={id}
               currentUserId={profile.id}
-              receiverId={classroom.supervisor_id}
+              receiverId={fallbackReceiverId}
             />
           </div>
         </div>

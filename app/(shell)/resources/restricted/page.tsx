@@ -3,7 +3,7 @@ import { redirect } from "next/navigation"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { FileText, ImageIcon, BookOpen } from "lucide-react"
+import { FileText, ImageIcon, Lock } from "lucide-react"
 import ResourceUpload from "@/components/resource-upload"
 import ResourceDeleteButton from "@/components/resource-delete-button"
 import ResourceDownloadButton from "@/components/resource-download-button"
@@ -25,7 +25,7 @@ function FileIcon({ type }: { type: string | null }) {
   return <FileText className="w-5 h-5 text-orange-500 shrink-0" />
 }
 
-export default async function ResourcesPage() {
+export default async function RestrictedResourcesPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/auth/login")
@@ -37,12 +37,16 @@ export default async function ResourcesPage() {
     .single()
   if (!profile) redirect("/auth/login")
 
-  const canUpload = profile.role === "owner" || profile.role === "supervisor"
+  if (!["owner", "administrator", "supervisor"].includes(profile.role)) {
+    redirect("/dashboard")
+  }
+
+  const canUpload = profile.role === "owner" || profile.role === "administrator"
 
   const { data: resources = [] } = await supabase
     .from("resources")
     .select("*")
-    .eq("visibility", "public")
+    .eq("visibility", "restricted")
     .order("created_at", { ascending: false })
 
   const uploaderIds = [...new Set((resources ?? []).map(r => r.uploaded_by).filter(Boolean))]
@@ -61,11 +65,11 @@ export default async function ResourcesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold flex items-center gap-2">
-            <BookOpen className="w-6 h-6" />
-            全体资料室
+            <Lock className="w-6 h-6" />
+            权限资料室
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            共 {resources?.length ?? 0} 个文件
+            共 {resources?.length ?? 0} 个文件 · 仅班主任及以上可见
           </p>
         </div>
       </div>
@@ -126,7 +130,7 @@ export default async function ResourcesPage() {
 
         <div className="lg:col-span-1">
           {canUpload ? (
-            <ResourceUpload visibility="public" />
+            <ResourceUpload visibility="restricted" />
           ) : (
             <Card>
               <CardContent className="py-8 text-center text-muted-foreground text-sm">
