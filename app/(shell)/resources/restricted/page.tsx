@@ -66,7 +66,7 @@ export default async function RestrictedResourcesPage() {
         <div>
           <h1 className="text-2xl font-semibold flex items-center gap-2">
             <Lock className="w-6 h-6" />
-            s资料室
+            ★资料室
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             共 {resources?.length ?? 0} 个文件 · 仅班主任及以上可见
