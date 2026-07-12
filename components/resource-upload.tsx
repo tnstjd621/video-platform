@@ -34,7 +34,10 @@ export default function ResourceUpload({
         .from("resources")
         .upload(path, file)
 
-      if (storageError) throw storageError
+      if (storageError) {
+  console.error("STORAGE 단계에서 실패:", storageError)
+  throw storageError
+}
 
       const { data: { publicUrl } } = supabase.storage
         .from("resources")
@@ -50,8 +53,10 @@ export default function ResourceUpload({
         visibility,
       })
 
-      if (dbError) throw dbError
-
+      if (dbError) {
+  console.error("DB INSERT 단계에서 실패:", dbError)
+  throw dbError
+}
       setFile(null)
       setDescription("")
       if (inputRef.current) inputRef.current.value = ""

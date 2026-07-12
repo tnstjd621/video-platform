@@ -37,7 +37,7 @@ export default async function ResourcesPage() {
     .single()
   if (!profile) redirect("/auth/login")
 
-  const canUpload = profile.role === "owner" || profile.role === "supervisor"
+  const canUpload = profile.role === "owner" || profile.role === "administrator"
 
   const { data: resources = [] } = await supabase
     .from("resources")
