@@ -31,7 +31,7 @@ const ALLOWED_TYPES = [
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ];
 
-const MAX_SIZE_MB = 10;
+const MAX_SIZE_MB = 2000;
 
 export default function FileUploadPanel({
   classroomId,
@@ -48,27 +48,40 @@ export default function FileUploadPanel({
   const supabase = createClient();
 
   const validateFile = (file: File): string | null => {
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      return "不支持的文件格式。支持：图片、PDF、Word文档";
-    }
     if (file.size > MAX_SIZE_MB * 1024 * 1024) {
       return `文件大小不能超过 ${MAX_SIZE_MB}MB`;
     }
     return null;
   };
 
-  const uploadFile = async (file: File) => {
-    const validationError = validateFile(file);
-    if (validationError) {
-      setError(validationError);
-      return;
-    }
+    const uploadFile = async (file: File) => {
+        const validationError = validateFile(file);
+        if (validationError) {
+          setError(validationError);
+          return;
+        }
 
-    setError(null);
-    setIsUploading(true);
-    setUploadProgress(10);
+        setError(null);
+        setIsUploading(true);
+        setUploadProgress(10);
 
-    const filePath = `${classroomId}/${currentUserId}/${Date.now()}_${file.name}`;
+    const sanitizeFileName = (name: string) => {
+      const lastDot = name.lastIndexOf(".");
+      const ext = lastDot !== -1 ? name.slice(lastDot) : "";
+      const base = lastDot !== -1 ? name.slice(0, lastDot) : name;
+
+      const safeBase = base
+        .normalize("NFKD")
+        .replace(/[^\w-]+/g, "_") 
+        .replace(/_+/g, "_")
+        .replace(/^_|_$/g, "");
+
+      const safeExt = ext.replace(/[^\w.]/g, "");
+
+      return `${safeBase || "file"}${safeExt}`;
+    };
+
+    const filePath = `${classroomId}/${currentUserId}/${Date.now()}_${sanitizeFileName(file.name)}`;
 
     // 업로드
     const { data: uploadData, error: uploadError } = await supabase.storage
@@ -189,13 +202,12 @@ export default function FileUploadPanel({
           <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
           <p className="text-sm font-medium">点击或拖拽文件到此处</p>
           <p className="text-xs text-muted-foreground mt-1">
-            支持图片、PDF、Word · 最大 {MAX_SIZE_MB}MB
+            支持所有文件格式 · 最大 {MAX_SIZE_MB}MB
           </p>
           <input
             ref={fileInputRef}
             type="file"
             className="hidden"
-            accept={ALLOWED_TYPES.join(",")}
             onChange={handleFileChange}
           />
         </div>

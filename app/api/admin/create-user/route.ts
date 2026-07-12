@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "未授权" }, { status: 401 })
     }
 
-    // owner 권한만 허용
+    // owner 또는 administrator 권한 허용
     const { data: profile, error: profileReadError } = await supabase
       .from("profiles")
       .select("role")
@@ -36,14 +36,19 @@ export async function POST(request: NextRequest) {
     if (profileReadError) {
       return NextResponse.json({ error: profileReadError.message }, { status: 403 })
     }
-    if (!profile || profile.role !== "owner") {
+    if (!profile || !["owner", "administrator"].includes(profile.role)) {
       return NextResponse.json({ error: "权限不足" }, { status: 403 })
     }
 
-    // 역할 화이트리스트(🚩 owner 포함)
+    // 역할 화이트리스트
     const allowedRoles = ["student", "administrator", "supervisor", "owner"] as const
     if (!allowedRoles.includes(role)) {
       return NextResponse.json({ error: "无效的角色类型" }, { status: 400 })
+    }
+
+    // administrator는 owner 계정을 생성할 수 없음
+    if (profile.role === "administrator" && role === "owner") {
+      return NextResponse.json({ error: "管理员无法创建所有者账户" }, { status: 403 })
     }
 
     // Supabase Auth에 사용자 생성 (service role)

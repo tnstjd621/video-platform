@@ -181,7 +181,7 @@ export default async function ClassroomPage({ params }: ClassroomPageProps) {
 
         {/* 채팅 + 파일 업로드 */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[600px]">
-          <div className="lg:col-span-2 h-full">
+          <div className="lg:col-span-2 h-full min-h-0">
             {isSupervisor || isAdmin ? (
               <div className="flex items-center justify-center h-full border rounded-xl text-muted-foreground text-sm">
                 请从学生列表进入个别聊天
@@ -194,7 +194,7 @@ export default async function ClassroomPage({ params }: ClassroomPageProps) {
               />
             )}
           </div>
-          <div className="lg:col-span-1 h-full">
+          <div className="lg:col-span-1 h-full min-h-0">
             <FileUploadPanel
               classroomId={id}
               currentUserId={profile.id}
@@ -202,7 +202,6 @@ export default async function ClassroomPage({ params }: ClassroomPageProps) {
             />
           </div>
         </div>
-
         <MarkReadClient ids={classAnnouncements.map((a) => a.id)} />
       </div>
     </div>

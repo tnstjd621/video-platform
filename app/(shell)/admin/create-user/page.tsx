@@ -15,7 +15,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 
-const ROLE_OPTIONS = [
+const ALL_ROLE_OPTIONS = [
   { value: "student", label: "学生", description: "可访问已授权课程内容" },
   { value: "supervisor", label: "班主任", description: "可管理班级及查看学生进度" },
   { value: "administrator", label: "管理员", description: "可管理用户、视频及分类" },
@@ -40,11 +40,16 @@ export default function CreateUserPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push("/auth/login"); return }
       const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
-      if (!profile || profile.role !== "owner") { router.push("/dashboard"); return }
+      if (!profile || !["owner", "administrator"].includes(profile.role)) { router.push("/dashboard"); return }
       setUserRole(profile.role)
     }
     checkUserRole()
   }, [router])
+
+  // administrator는 owner 옵션을 볼 수 없음
+  const ROLE_OPTIONS = userRole === "owner"
+    ? ALL_ROLE_OPTIONS
+    : ALL_ROLE_OPTIONS.filter(r => r.value !== "owner")
 
   const generateRandomPassword = () => {
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"

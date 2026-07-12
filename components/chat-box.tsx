@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Send, FileText, Download } from "lucide-react";
+import { Send, FileText, Download, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Message {
@@ -31,36 +30,93 @@ interface ChatBoxProps {
   otherUserId: string;
 }
 
+const PAGE_SIZE = 50;
+
 export default function ChatBox({ classroomId, currentUserId, otherUserId }: ChatBoxProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [initialLoaded, setInitialLoaded] = useState(false);
+
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const oldestCreatedAtRef = useRef<string | null>(null);
   const [supabase] = useState(() => createClient());
 
+  const baseFilter = () =>
+    supabase
+      .from("messages")
+      .select(
+        `
+        id, content, file_url, file_name, file_type,
+        message_type, created_at, sender_id, receiver_id,
+        profiles (name, role)
+      `
+      )
+      .eq("classroom_id", classroomId)
+      .or(
+        `and(sender_id.eq.${currentUserId},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${currentUserId})`
+      );
+
+  // 최초 로드: 최신 PAGE_SIZE개만 가져와서 오름차순으로 뒤집기
+  const fetchInitialMessages = async () => {
+    const { data, error } = await baseFilter()
+      .order("created_at", { ascending: false })
+      .limit(PAGE_SIZE);
+
+    if (!error && data) {
+      const ordered = [...data].reverse() as Message[];
+      setMessages(ordered);
+      oldestCreatedAtRef.current = ordered[0]?.created_at ?? null;
+      setHasMore(data.length === PAGE_SIZE);
+    }
+    setInitialLoaded(true);
+  };
+
+  // 스크롤을 위로 올렸을 때 이전 메시지 로드
+  const loadOlderMessages = useCallback(async () => {
+    if (loadingMore || !hasMore || !oldestCreatedAtRef.current) return;
+    setLoadingMore(true);
+
+    const container = scrollRef.current;
+    const prevScrollHeight = container?.scrollHeight ?? 0;
+
+    const { data, error } = await baseFilter()
+      .lt("created_at", oldestCreatedAtRef.current)
+      .order("created_at", { ascending: false })
+      .limit(PAGE_SIZE);
+
+    if (!error && data) {
+      const ordered = [...data].reverse() as Message[];
+      setMessages((prev) => [...ordered, ...prev]);
+      if (ordered.length > 0) oldestCreatedAtRef.current = ordered[0].created_at;
+      setHasMore(data.length === PAGE_SIZE);
+
+      // 이전 메시지가 위에 붙으면서 스크롤 위치가 튀지 않도록 보정
+      requestAnimationFrame(() => {
+        if (container) {
+          const newScrollHeight = container.scrollHeight;
+          container.scrollTop = newScrollHeight - prevScrollHeight;
+        }
+      });
+    }
+    setLoadingMore(false);
+  }, [loadingMore, hasMore, classroomId, currentUserId, otherUserId]);
+
+  const handleScroll = () => {
+    const container = scrollRef.current;
+    if (!container) return;
+    if (container.scrollTop < 60) {
+      loadOlderMessages();
+    }
+  };
+
   useEffect(() => {
-    const fetchMessages = async () => {
-      const { data, error } = await supabase
-        .from("messages")
-        .select(`
-          id, content, file_url, file_name, file_type,
-          message_type, created_at, sender_id, receiver_id,
-          profiles (name, role)
-        `)
-        .eq("classroom_id", classroomId)
-        .or(
-          `and(sender_id.eq.${currentUserId},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${currentUserId})`
-        )
-        .order("created_at", { ascending: true })
-        .limit(100);
-
-      if (!error && data) setMessages(data as Message[]);
-    };
-
     let channel: ReturnType<typeof supabase.channel> | null = null;
 
     const setupRealtime = async () => {
-      // Realtime 소켓에 현재 세션 토큰을 명시적으로 전달 (RLS 인증 타이밍 문제 방지)
       const {
         data: { session },
       } = await supabase.auth.getSession();
@@ -68,7 +124,7 @@ export default function ChatBox({ classroomId, currentUserId, otherUserId }: Cha
         supabase.realtime.setAuth(session.access_token);
       }
 
-      await fetchMessages();
+      await fetchInitialMessages();
 
       channel = supabase
         .channel(`messages:${classroomId}:${currentUserId}:${otherUserId}`)
@@ -81,7 +137,6 @@ export default function ChatBox({ classroomId, currentUserId, otherUserId }: Cha
             filter: `classroom_id=eq.${classroomId}`,
           },
           async (payload) => {
-            console.log("payload received: ", payload);
             const { sender_id, receiver_id } = payload.new;
             const isRelevant =
               (sender_id === currentUserId && receiver_id === otherUserId) ||
@@ -103,9 +158,7 @@ export default function ChatBox({ classroomId, currentUserId, otherUserId }: Cha
             ]);
           }
         )
-        .subscribe((status) => {
-          console.log("채널 구독 상태:", status);
-        });
+        .subscribe();
     };
 
     setupRealtime();
@@ -115,9 +168,33 @@ export default function ChatBox({ classroomId, currentUserId, otherUserId }: Cha
     };
   }, [classroomId, currentUserId, otherUserId]);
 
+  // 최초 로딩 완료 시: 애니메이션 없이 즉시 맨 아래로
+  const hasScrolledInitially = useRef(false);
   useEffect(() => {
+    if (initialLoaded && !hasScrolledInitially.current) {
+      hasScrolledInitially.current = true;
+      // 레이아웃이 완전히 그려진 다음 프레임에 스크롤 (그래야 확실히 맨 아래로 감)
+      requestAnimationFrame(() => {
+        if (scrollRef.current) {
+          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+      });
+    }
+  }, [initialLoaded]);
+
+// 이후 새 메시지가 왔을 때만 부드럽게 맨 아래로 (이전 메시지 로드 시에는 스크롤 유지)
+const prevMessageCount = useRef(0);
+useEffect(() => {
+  if (!hasScrolledInitially.current) {
+    prevMessageCount.current = messages.length;
+    return;
+  }
+  const isNewMessageAppended = messages.length > prevMessageCount.current && !loadingMore;
+  if (isNewMessageAppended) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }
+  prevMessageCount.current = messages.length;
+}, [messages]);
 
   const sendMessage = async () => {
     const content = newMessage.trim();
@@ -159,14 +236,32 @@ export default function ChatBox({ classroomId, currentUserId, otherUserId }: Cha
   };
 
   return (
-    <div className="flex flex-col h-full border rounded-xl bg-background shadow-sm">
-      <div className="px-4 py-3 border-b font-semibold text-sm flex items-center gap-2">
+    // h-full + overflow-hidden으로 바깥 카드 높이를 부모(h-[600px])에 고정
+    <div className="flex flex-col h-full border rounded-xl bg-background shadow-sm overflow-hidden">
+      <div className="px-4 py-3 border-b font-semibold text-sm flex items-center gap-2 shrink-0">
         💬 <span>班级聊天室</span>
       </div>
 
-      <ScrollArea className="flex-1 px-4 py-3">
+      {/* 이 div가 실제 스크롤 컨테이너. flex-1 + min-h-0 필수 */}
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        className="flex-1 min-h-0 overflow-y-auto px-4 py-3"
+      >
         <div className="space-y-4">
-          {messages.length === 0 && (
+          {loadingMore && (
+            <div className="flex justify-center py-2">
+              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+            </div>
+          )}
+
+          {!hasMore && messages.length > 0 && (
+            <p className="text-center text-[10px] text-muted-foreground py-2">
+              — 没有更多消息了 —
+            </p>
+          )}
+
+          {initialLoaded && messages.length === 0 && (
             <p className="text-center text-muted-foreground text-sm py-12">
               暂无消息，开始聊天吧！
             </p>
@@ -228,9 +323,9 @@ export default function ChatBox({ classroomId, currentUserId, otherUserId }: Cha
           })}
           <div ref={bottomRef} />
         </div>
-      </ScrollArea>
+      </div>
 
-      <div className="px-4 py-3 border-t flex gap-2">
+      <div className="px-4 py-3 border-t flex gap-2 shrink-0">
         <Input
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}

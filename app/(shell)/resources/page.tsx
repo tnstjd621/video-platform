@@ -62,7 +62,7 @@ export default async function ResourcesPage() {
         <div>
           <h1 className="text-2xl font-semibold flex items-center gap-2">
             <BookOpen className="w-6 h-6" />
-            全体资料室
+            资料室
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             共 {resources?.length ?? 0} 个文件

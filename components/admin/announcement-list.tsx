@@ -7,6 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import AnnouncementDeleteButton from "@/components/admin/announcement-delete-button"
 
 type Item = {
   id: string
@@ -21,9 +22,11 @@ type Item = {
 function AnnouncementListImpl({
   items,
   fallbackError,
+  showDelete = false,
 }: {
   items: Item[]
   fallbackError?: boolean
+  showDelete?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [current, setCurrent] = useState<Item | null>(null)
@@ -55,21 +58,30 @@ function AnnouncementListImpl({
     <>
       <div className="divide-y rounded-md border">
         {rows.map((a) => (
-          <button
+          <div
             key={a.id}
-            onClick={() => {
-              setCurrent(a)
-              setOpen(true)
-            }}
-            className="w-full text-left p-2.5 hover:bg-muted/60 focus:bg-muted/60 focus:outline-none"
+            className="flex items-center w-full hover:bg-muted/60 focus-within:bg-muted/60"
           >
-            <div className="flex items-center gap-2">
-              <div className="flex-1 min-w-0 truncate font-medium">{a.title ?? "（无标题）"}</div>
-              <div className="text-xs text-muted-foreground truncate">{a.author ?? "系统管理员"}</div>
-              <div className="text-xs text-muted-foreground truncate">{a.audience ?? "全部用户"}</div>
-              <div className="text-xs text-muted-foreground shrink-0">{a._dateText}</div>
-            </div>
-          </button>
+            <button
+              onClick={() => {
+                setCurrent(a)
+                setOpen(true)
+              }}
+              className="flex-1 min-w-0 text-left p-2.5 focus:outline-none"
+            >
+              <div className="flex items-center gap-2">
+                <div className="flex-1 min-w-0 truncate font-medium">{a.title ?? "（无标题）"}</div>
+                <div className="text-xs text-muted-foreground truncate">{a.author ?? "系统管理员"}</div>
+                <div className="text-xs text-muted-foreground truncate">{a.audience ?? "全部用户"}</div>
+                <div className="text-xs text-muted-foreground shrink-0">{a._dateText}</div>
+              </div>
+            </button>
+            {showDelete && (
+              <div className="pr-2.5 shrink-0">
+                <AnnouncementDeleteButton announcementId={a.id} />
+              </div>
+            )}
+          </div>
         ))}
       </div>
 
@@ -103,6 +115,12 @@ function AnnouncementListImpl({
           <div className="mt-2 whitespace-pre-wrap leading-relaxed text-sm">
             {current?.content ?? "（无内容）"}
           </div>
+
+          {showDelete && current && (
+            <div className="flex justify-end pt-2 border-t">
+              <AnnouncementDeleteButton announcementId={current.id} />
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </>

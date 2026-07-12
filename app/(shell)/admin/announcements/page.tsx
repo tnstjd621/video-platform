@@ -198,6 +198,7 @@ export default async function AdminAnnouncementsPage() {
               <AnnouncementList
                 items={recent.map(({ author_id, ...rest }) => rest) as any}
                 fallbackError={!!error}
+                showDelete
               />
             </CardContent>
           </Card>
