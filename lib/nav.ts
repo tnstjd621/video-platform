@@ -51,13 +51,13 @@ export const NAV_BY_ROLE: Record<Role, NavSection[]> = {
       item("/profile", "账户", UserCircle2, "查看与修改个人资料"),
     ]),
     section("班主任", [
-      item("/supervisor/classrooms", "我的班级", GraduationCap, "管理所负责的班级"),
       item("/admin/courses", "我的课程", BookOpenText, "查看所有视频课程"),
+      item("/supervisor/classrooms", "我的班级", GraduationCap, "管理所负责的班级"),
       item("/supervisor/announcements", "班级公告", Megaphone, "发布与管理班级公告"),
       item("/supervisor/progress", "学生进度", BarChart2, "查看本班学生进度"),
-      item("/announcements", "公告", Bell, "查看平台公告"),
       item("/resources", "资料室", BookOpen, "上传与管理学习资料"),
       item("/resources/restricted", "★资料室", Lock, "仅班主任及以上可见的资料"),
+      item("/announcements", "公告", Bell, "查看平台公告"),
     ]),
   ],
   student: [
@@ -67,10 +67,10 @@ export const NAV_BY_ROLE: Record<Role, NavSection[]> = {
     ]),
     section("学习", [
       item("/courses", "我的课程", BookOpenText, "进入已获授权课程"),
-      item("/progress", "我的进度", ClipboardList, "查看学习进度与统计"),
       item("/classrooms", "我的班级", GraduationCap, "查看班级与公告"),
-      item("/announcements", "公告", Megaphone, "查看系统/班级公告"),
+      item("/progress", "我的进度", ClipboardList, "查看学习进度与统计"),
       item("/resources", "资料室", BookOpen, "下载学习资料"),
+      item("/announcements", "公告", Megaphone, "查看系统/班级公告"),
     ]),
   ],
 }

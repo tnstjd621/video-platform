@@ -54,13 +54,13 @@ const NAV_BY_ROLE: Record<Role, Array<{title:string; children:Array<{href:string
       item("/profile", "账户", UserCircle2),
     ]),
     section("班主任", [
-      item("/supervisor/classrooms", "我的班级", GraduationCap),
       item("/admin/courses", "我的课程", BookOpenText),
+      item("/supervisor/classrooms", "我的班级", GraduationCap),
       item("/supervisor/announcements", "班级公告", Megaphone),
       item("/supervisor/progress", "学生进度", BarChart2),
-      item("/announcements", "公告", Bell),
       item("/resources", "资料室", BookOpen),
       item("/resources/restricted", "★资料室", Lock),
+      item("/announcements", "公告", Bell),
     ]),
   ],
   student: [
@@ -70,10 +70,10 @@ const NAV_BY_ROLE: Record<Role, Array<{title:string; children:Array<{href:string
     ]),
     section("学习", [
       item("/courses", "我的课程", BookOpenText),
-      item("/progress", "我的进度", ClipboardList),
       item("/classrooms", "我的班级", GraduationCap),
-      item("/announcements", "公告", Megaphone),
+      item("/progress", "我的进度", ClipboardList),
       item("/resources", "资料室", BookOpen),
+      item("/announcements", "公告", Megaphone),
     ]),
   ],
 }
