@@ -1,17 +1,46 @@
 // app/supervisor/classrooms/[id]/page.tsx
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { redirect } from "next/navigation"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { MessageCircle, ArrowLeft, Users } from "lucide-react"
+import { MessageCircle, ArrowLeft, Users, School } from "lucide-react"
+import { AnnouncementList } from "@/components/admin/announcement-list"
+import MarkReadClient from "@/components/announcement-mark-read"
+
+interface ClassroomDetailPageProps {
+  params: Promise<{ id: string }>
+}
+
+type Raw = Record<string, any>
+const isUUID = (v: unknown) =>
+  typeof v === "string" && /^[0-9a-fA-F-]{36}$/.test(v)
+
+function normalize(a: Raw) {
+  const authorId =
+    (isUUID(a.author_id) && a.author_id) ||
+    (isUUID(a.created_by) && a.created_by) ||
+    null
+  const authorName =
+    (typeof a.author === "string" && !isUUID(a.author) && a.author) ||
+    null
+  return {
+    id: a.id,
+    title: a.title ?? null,
+    content: a.body ?? a.content ?? null,
+    audience: a.audience ?? null,
+    author_id: authorId,
+    author: authorName,
+    created_at: a.created_at ?? null,
+    classroom_id: a.classroom_id ?? null,
+  }
+}
 
 export default async function ClassroomDetailPage({
   params,
-}: {
-  params: Promise<{ id: string }>
-}) {
+}: ClassroomDetailPageProps) {
   const { id } = await params
 
   const supabase = await createClient()
@@ -42,11 +71,40 @@ export default async function ClassroomDetailPage({
     .select("student_id, profiles(id, name, email)")
     .eq("classroom_id", id)
 
-  const { data: announcements } = await supabase
-    .from("classroom_announcements")
-    .select("*")
+  // ── 반 공고 fetch (학생 페이지와 동일한 announcements + announcement_classrooms 방식) ──
+  const { data: annLinks } = await supabase
+    .from("announcement_classrooms")
+    .select("ann_id")
     .eq("classroom_id", id)
-    .order("created_at", { ascending: false })
+
+  const annIds = (annLinks ?? []).map((r) => r.ann_id)
+
+  let classAnnouncements: ReturnType<typeof normalize>[] = []
+  if (annIds.length > 0) {
+    const { data: annRaw = [] } = await supabase
+      .from("announcements")
+      .select("*")
+      .eq("audience", "classrooms")
+      .in("id", annIds)
+      .order("created_at", { ascending: false })
+
+    const admin = createAdminClient()
+    const authorIds = Array.from(
+      new Set(annRaw.map((a) => a.created_by).filter(Boolean))
+    )
+    const { data: profs } = await admin
+      .from("profiles")
+      .select("id, name, email")
+      .in("id", authorIds)
+    const idToName = new Map(
+      (profs ?? []).map((p) => [p.id, p.name || p.email || "用户"])
+    )
+
+    classAnnouncements = annRaw.map((a) => ({
+      ...normalize(a),
+      author: idToName.get(a.created_by) ?? "系统管理员",
+    }))
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -116,23 +174,31 @@ export default async function ClassroomDetailPage({
           )}
         </div>
 
-        {/* 공지 목록 */}
-        <div className="space-y-3">
-          <h2 className="text-lg font-semibold">公告列表</h2>
-          {!announcements || announcements.length === 0 ? (
-            <p className="text-sm text-muted-foreground">暂无公告</p>
-          ) : (
-            <div className="space-y-2">
-              {announcements.map((a) => (
-                <div key={a.id} className="border rounded-lg p-4">
-                  <p className="font-medium text-sm">{a.title}</p>
-                  <p className="text-sm text-muted-foreground mt-1">{a.content}</p>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        {/* 반 공고 (팝업 방식) */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <School className="w-4 h-4 text-purple-500" />
+              班级公告
+              {classAnnouncements.length > 0 && (
+                <Badge variant="secondary" className="ml-auto text-xs">
+                  {classAnnouncements.length}
+                </Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {classAnnouncements.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                暂无班级公告
+              </p>
+            ) : (
+              <AnnouncementList items={classAnnouncements as any} />
+            )}
+          </CardContent>
+        </Card>
 
+        <MarkReadClient ids={classAnnouncements.map((a) => a.id)} />
       </div>
     </div>
   )

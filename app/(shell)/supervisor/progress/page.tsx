@@ -41,9 +41,22 @@ async function getData(params: {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/auth/login")
 
-  const { data: myClasses } = await supabase
-    .from("classrooms").select("id,name")
-    .eq("supervisor_id", user.id).order("name")
+  // classrooms.supervisor_id (1:1 레거시) 대신 classroom_supervisors (N:M) 조인 테이블로
+  // 이 반주임이 담당하는 모든 반을 조회 — 두 번째 이상의 반주임도 정상적으로 잡히도록 수정
+  const { data: csRows } = await supabase
+    .from("classroom_supervisors")
+    .select("classroom_id")
+    .eq("supervisor_id", user.id)
+
+  const myClassroomIds = (csRows ?? []).map((r) => r.classroom_id)
+
+  const { data: myClasses } = myClassroomIds.length > 0
+    ? await supabase
+        .from("classrooms")
+        .select("id,name")
+        .in("id", myClassroomIds)
+        .order("name")
+    : { data: [] as { id: string; name: string }[] }
 
   const { data: categories } = await supabase
     .from("categories").select("id,name").order("name")
